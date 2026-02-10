@@ -6,8 +6,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#1a1a2e">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; connect-src *;">
-  <title>LM Studio Chat</title>
+  <title>LM Studio Remote</title>
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="stylesheet" href="style.css">
@@ -18,17 +17,16 @@
     <div id="connection-banner" class="banner hidden">
       <div class="banner-content">
         <h2>Connect to LM Studio</h2>
-        <p>Enter your LM Studio server address</p>
+        <p>Enter your LM Studio server address and port</p>
         <div class="connect-form">
           <div class="input-row">
-            <input type="text" id="server-url" placeholder="localhost:1234" value="localhost:1234" autocomplete="off" inputmode="url">
+            <input type="text" id="server-url" placeholder="localhost:1234" autocomplete="off" inputmode="url">
             <button id="connect-btn" class="btn-primary">Connect</button>
           </div>
           <label class="checkbox-row">
             <input type="checkbox" id="save-connection" checked>
             <span>Remember this connection</span>
           </label>
-          <p class="connect-hint">Default is <strong>localhost:1234</strong>. Just click Connect if LM Studio is running on this PC.</p>
         </div>
       </div>
     </div>
@@ -40,7 +38,7 @@
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         </button>
         <div id="status-indicator" class="status disconnected" title="Disconnected"></div>
-        <span id="header-title">LM Studio Chat</span>
+        <span id="header-title">LM Studio Remote</span>
       </div>
       <div class="header-right">
         <select id="model-select" class="model-dropdown" disabled>
