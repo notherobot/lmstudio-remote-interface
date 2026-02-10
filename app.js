@@ -51,7 +51,12 @@ function init() {
     sidebarUrl.value = state.serverUrl;
     attemptConnect(state.serverUrl);
   } else {
-    banner.classList.remove('hidden');
+    // Auto-connect to localhost:1234 by default
+    attemptConnect('localhost:1234').then(() => {
+      if (!state.connected) {
+        banner.classList.remove('hidden');
+      }
+    });
   }
 
   showWelcome();
@@ -167,7 +172,7 @@ function showWelcome() {
   if (messagesEl.querySelector('.welcome-msg')) return;
   const div = document.createElement('div');
   div.className = 'welcome-msg';
-  div.innerHTML = '<h3>LM Studio Remote</h3><p>Send a message to start chatting with your local LLM.</p>';
+  div.innerHTML = '<h3>LM Studio Chat</h3><p>Send a message to start chatting with your local LLM.</p>';
   messagesEl.appendChild(div);
 }
 
