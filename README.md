@@ -1,111 +1,40 @@
-# LM Studio Remote Interface
+# LM Studio Chat
 
-A mobile-friendly web app for chatting with [LM Studio](https://lmstudio.ai/) running on your PC — accessible from any browser on your phone, tablet, or another computer on your network.
+A clean chat interface for your local LLM running in [LM Studio](https://lmstudio.ai/). Open the HTML file, start chatting — no setup required.
 
-**Live URL:** `https://notherobot.github.io/lmstudio-remote-interface/`
+## Usage
 
----
+1. Open **LM Studio** and load a model
+2. Go to the **Developer** tab and click **Start Server** (runs on `127.0.0.1:1234`)
+3. Open `index.html` in your browser
+4. Chat
 
-## Quick Start
-
-1. Open the live URL on your phone's browser
-2. Enter your LM Studio server address (e.g. `192.168.1.100:1234`)
-3. Start chatting
-
-That's it. The page remembers your connection info.
-
----
-
-## Setup Guide
-
-### 1. Enable LM Studio's API Server
-
-1. Open LM Studio on your PC
-2. Go to the **Developer** tab (or **Local Server** in older versions)
-3. Load a model
-4. Click **Start Server**
-5. **Important:** Set the server to listen on `0.0.0.0` (all interfaces), not just `localhost`
-   - In LM Studio settings, look for "Serve on Local Network" or set the host to `0.0.0.0`
-6. Note the port number (default is `1234`)
-
-### 2. Find Your PC's Local IP
-
-- **Windows:** Open Command Prompt and run `ipconfig` — look for your IPv4 address (e.g. `192.168.1.100`)
-- **Mac:** Open Terminal and run `ifconfig en0` — look for the `inet` address
-- **Linux:** Run `ip addr` or `hostname -I`
-
-Your local IP typically looks like `192.168.x.x` or `10.0.x.x`.
-
-### 3. Connect
-
-1. Open this app in your phone's browser (or any browser on the same network)
-2. Enter: `192.168.x.x:1234` (your PC's local IP + LM Studio port)
-3. Tap **Connect**
-4. Select a model from the dropdown
-5. Start chatting
-
-### 4. Bookmark for Quick Access
-
-**iPhone (Add to Home Screen):**
-1. Open the page in Safari
-2. Tap the Share button (square with arrow)
-3. Tap "Add to Home Screen"
-4. It will open like a native app
-
-**Android:**
-1. Open the page in Chrome
-2. Tap the three-dot menu
-3. Tap "Add to Home screen" or "Install app"
-
----
+The app auto-connects when the page loads. If LM Studio isn't running yet, it retries automatically.
 
 ## Features
 
-- **Mobile-first design** — optimized for phone screens
-- **Streaming responses** — see tokens as they arrive
-- **Markdown rendering** — code blocks, tables, lists, etc.
-- **Model selection** — pick from loaded models
-- **System prompt** — configure assistant behavior
-- **Temperature & max tokens** — adjustable generation settings
-- **Connection memory** — saves your server address locally
-- **Works offline** — PWA with service worker caching
-- **Stop generation** — cancel responses mid-stream
-- **Copy code blocks** — one-tap copy for code snippets
+- Streaming responses with stop button
+- Model selector (auto-populated from LM Studio)
+- Markdown rendering with syntax-highlighted code blocks
+- Copy button on code blocks
+- System prompt configuration
+- Temperature and max tokens sliders
+- New chat button
+- Dark theme
+- PWA — works offline once loaded
 
----
+## Planned
 
-## Security
+- Voice chat
+- File attachments
 
-- **Local network only** — all API calls go directly from your browser to your PC over your local network. Nothing is proxied through any external server.
-- **Static webpage** — this site is a static page hosted on GitHub Pages. It has no backend, no database, no analytics, no tracking.
-- **Local storage only** — your server address and settings are stored in your browser's localStorage. They never leave your device.
-- **No API keys needed** — LM Studio's local server doesn't require authentication.
-- **Open source** — all code is in this repository. Inspect it yourself.
+## How It Works
 
----
+The app calls LM Studio's OpenAI-compatible local API:
+- `GET /v1/models` — lists loaded models
+- `POST /v1/chat/completions` — sends messages, streams responses
 
-## Troubleshooting
-
-| Problem | Fix |
-|---|---|
-| "Could not connect" | Make sure LM Studio's server is running and set to `0.0.0.0` (not `localhost`) |
-| No models in dropdown | Load a model in LM Studio before connecting |
-| Timeout errors | Make sure both devices are on the same network |
-| CORS errors | LM Studio includes CORS headers by default; make sure you're on a recent version |
-| Page won't load on phone | Ensure your phone has internet access (needed to load the page the first time) |
-
----
-
-## Tech Stack
-
-- Pure HTML, CSS, JavaScript — no build step, no frameworks
-- Fetch API with streaming (ReadableStream)
-- Service Worker for offline PWA support
-- Lightweight built-in markdown renderer
-- CSS custom properties for theming
-- `safe-area-inset` support for notched devices
-
----
+Everything runs locally. No data leaves your machine.
 
 ## License
 

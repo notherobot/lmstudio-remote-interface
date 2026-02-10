@@ -1,31 +1,24 @@
+// === Config ===
+const API_BASE = 'http://127.0.0.1:1234';
+
 // === State ===
 const state = {
-  serverUrl: '',
   connected: false,
-  messages: [],       // { role, content }
+  messages: [],
   streaming: false,
   abortController: null,
 };
 
-// === DOM Elements ===
+// === DOM ===
 const $ = (sel) => document.querySelector(sel);
-const banner         = $('#connection-banner');
-const serverUrlInput = $('#server-url');
-const connectBtn     = $('#connect-btn');
-const saveCheckbox   = $('#save-connection');
-
-const header         = $('#header');
 const statusDot      = $('#status-indicator');
-const headerTitle    = $('#header-title');
 const modelSelect    = $('#model-select');
-const clearChatBtn   = $('#clear-chat-btn');
+const newChatBtn     = $('#new-chat-btn');
 
 const sidebarToggle  = $('#sidebar-toggle');
 const sidebar        = $('#sidebar');
 const sidebarOverlay = $('#sidebar-overlay');
 const sidebarClose   = $('#sidebar-close');
-const sidebarUrl     = $('#sidebar-server-url');
-const sidebarConnect = $('#sidebar-connect-btn');
 const systemPrompt   = $('#system-prompt');
 const tempSlider     = $('#temperature');
 const tempValue      = $('#temp-value');
@@ -36,6 +29,8 @@ const clearSettings  = $('#clear-settings-btn');
 
 const chatContainer  = $('#chat-container');
 const messagesEl     = $('#messages');
+const welcome        = $('#welcome');
+const welcomeStatus  = $('#welcome-status');
 const userInput      = $('#user-input');
 const sendBtn        = $('#send-btn');
 const stopBtn        = $('#stop-btn');
@@ -44,39 +39,27 @@ const stopBtn        = $('#stop-btn');
 function init() {
   loadSettings();
   setupListeners();
-  autoGrowTextarea();
-
-  if (state.serverUrl) {
-    serverUrlInput.value = state.serverUrl;
-    sidebarUrl.value = state.serverUrl;
-    attemptConnect(state.serverUrl);
-  } else {
-    banner.classList.remove('hidden');
-  }
-
-  showWelcome();
+  autoGrow();
+  connect();
 }
 
-// === Settings Persistence ===
+// === Settings ===
 function loadSettings() {
-  const saved = localStorage.getItem('lmstudio-settings');
-  if (saved) {
-    try {
-      const s = JSON.parse(saved);
-      state.serverUrl = s.serverUrl || '';
-      systemPrompt.value = s.systemPrompt || '';
-      tempSlider.value = s.temperature ?? 0.7;
-      tokensSlider.value = s.maxTokens ?? 2048;
-      streamToggle.checked = s.stream ?? true;
-      tempValue.textContent = tempSlider.value;
-      tokensValue.textContent = tokensSlider.value;
-    } catch(e) { /* ignore */ }
-  }
+  const saved = localStorage.getItem('lmstudio-chat-settings');
+  if (!saved) return;
+  try {
+    const s = JSON.parse(saved);
+    systemPrompt.value = s.systemPrompt || '';
+    tempSlider.value = s.temperature ?? 0.7;
+    tokensSlider.value = s.maxTokens ?? 2048;
+    streamToggle.checked = s.stream ?? true;
+    tempValue.textContent = tempSlider.value;
+    tokensValue.textContent = tokensSlider.value;
+  } catch(e) { /* ignore */ }
 }
 
 function saveSettings() {
-  localStorage.setItem('lmstudio-settings', JSON.stringify({
-    serverUrl: saveCheckbox.checked ? state.serverUrl : '',
+  localStorage.setItem('lmstudio-chat-settings', JSON.stringify({
     systemPrompt: systemPrompt.value,
     temperature: parseFloat(tempSlider.value),
     maxTokens: parseInt(tokensSlider.value),
@@ -85,36 +68,20 @@ function saveSettings() {
 }
 
 // === Connection ===
-function normalizeUrl(raw) {
-  let url = raw.trim();
-  if (!url) return '';
-  // strip trailing slashes
-  url = url.replace(/\/+$/, '');
-  // add http:// if no protocol
-  if (!/^https?:\/\//i.test(url)) {
-    url = 'http://' + url;
-  }
-  return url;
-}
-
-async function attemptConnect(raw) {
-  const base = normalizeUrl(raw);
-  if (!base) return;
-
+async function connect() {
   setStatus('connecting');
+  welcomeStatus.textContent = 'Connecting to LM Studio...';
 
   try {
-    const resp = await fetch(base + '/v1/models', {
-      signal: AbortSignal.timeout(8000),
+    const resp = await fetch(API_BASE + '/v1/models', {
+      signal: AbortSignal.timeout(5000),
     });
-
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
 
     const data = await resp.json();
-    state.serverUrl = base;
     state.connected = true;
 
-    // populate models
+    // Populate models
     modelSelect.innerHTML = '';
     modelSelect.disabled = false;
     const models = data.data || [];
@@ -130,59 +97,42 @@ async function attemptConnect(raw) {
     }
 
     setStatus('connected');
-    banner.classList.add('hidden');
-    sidebarUrl.value = raw.trim();
-    saveSettings();
+    welcomeStatus.textContent = 'What can I help you with?';
+    updateSendBtn();
   } catch (err) {
     setStatus('disconnected');
     state.connected = false;
-    modelSelect.innerHTML = '<option value="">Connection failed</option>';
+    modelSelect.innerHTML = '<option value="">Offline</option>';
     modelSelect.disabled = true;
-
-    if (!banner.classList.contains('hidden')) {
-      // Show error on the banner
-      showBannerError('Could not connect. Check the address and make sure LM Studio\'s server is running.');
-    }
+    welcomeStatus.innerHTML = 'Could not reach LM Studio at <code>127.0.0.1:1234</code><br><span class="hint">Make sure the server is running in the Developer tab</span>';
+    // Retry in 5s
+    setTimeout(connect, 5000);
   }
 }
 
 function setStatus(s) {
   statusDot.className = 'status ' + s;
-  statusDot.title = s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-function showBannerError(msg) {
-  let errEl = banner.querySelector('.banner-error');
-  if (!errEl) {
-    errEl = document.createElement('p');
-    errEl.className = 'banner-error';
-    errEl.style.cssText = 'color:#f5a0a0;font-size:0.85rem;margin-top:12px;';
-    banner.querySelector('.banner-content').appendChild(errEl);
-  }
-  errEl.textContent = msg;
 }
 
 // === Chat ===
-function showWelcome() {
-  if (messagesEl.querySelector('.welcome-msg')) return;
-  const div = document.createElement('div');
-  div.className = 'welcome-msg';
-  div.innerHTML = '<h3>LM Studio Remote</h3><p>Send a message to start chatting with your local LLM.</p>';
-  messagesEl.appendChild(div);
-}
-
-function removeWelcome() {
-  const w = messagesEl.querySelector('.welcome-msg');
-  if (w) w.remove();
+function hideWelcome() {
+  if (welcome) welcome.style.display = 'none';
 }
 
 function addMessage(role, content, isError) {
-  removeWelcome();
+  hideWelcome();
   const wrap = document.createElement('div');
   wrap.className = `message ${role}`;
 
+  const avatar = document.createElement('div');
+  avatar.className = 'avatar';
+  avatar.textContent = role === 'user' ? 'You' : 'AI';
+
+  const body = document.createElement('div');
+  body.className = 'message-body';
+
   const bubble = document.createElement('div');
-  bubble.className = 'message-bubble' + (isError ? ' error' : '');
+  bubble.className = 'message-content' + (isError ? ' error' : '');
 
   if (role === 'assistant' && !isError) {
     bubble.innerHTML = renderMarkdown(content);
@@ -190,7 +140,9 @@ function addMessage(role, content, isError) {
     bubble.textContent = content;
   }
 
-  wrap.appendChild(bubble);
+  body.appendChild(bubble);
+  wrap.appendChild(avatar);
+  wrap.appendChild(body);
   messagesEl.appendChild(wrap);
   addCopyButtons(bubble);
   scrollToBottom();
@@ -201,16 +153,11 @@ function renderMarkdown(text) {
   if (typeof marked !== 'undefined') {
     return marked.parse(text, { breaks: true });
   }
-  // fallback: basic escaping + newlines
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/\n/g, '<br>');
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
 }
 
-function addCopyButtons(bubble) {
-  bubble.querySelectorAll('pre').forEach(pre => {
+function addCopyButtons(el) {
+  el.querySelectorAll('pre').forEach(pre => {
     if (pre.querySelector('.copy-btn')) return;
     const btn = document.createElement('button');
     btn.className = 'copy-btn';
@@ -221,7 +168,6 @@ function addCopyButtons(bubble) {
       btn.textContent = 'Copied!';
       setTimeout(() => btn.textContent = 'Copy', 1500);
     });
-    pre.style.position = 'relative';
     pre.appendChild(btn);
   });
 }
@@ -234,19 +180,16 @@ async function sendMessage() {
   const text = userInput.value.trim();
   if (!text || !state.connected) return;
 
-  // Add user message
   state.messages.push({ role: 'user', content: text });
   addMessage('user', text);
   userInput.value = '';
-  autoGrowTextarea();
-  updateSendButton();
+  autoGrow();
+  updateSendBtn();
 
-  // Build message array
+  // Build API messages
   const apiMessages = [];
-  const sysPrompt = systemPrompt.value.trim();
-  if (sysPrompt) {
-    apiMessages.push({ role: 'system', content: sysPrompt });
-  }
+  const sys = systemPrompt.value.trim();
+  if (sys) apiMessages.push({ role: 'system', content: sys });
   apiMessages.push(...state.messages);
 
   const useStream = streamToggle.checked;
@@ -255,34 +198,41 @@ async function sendMessage() {
   sendBtn.classList.add('hidden');
   stopBtn.classList.remove('hidden');
 
-  // Prepare assistant bubble
-  removeWelcome();
-  const assistantWrap = document.createElement('div');
-  assistantWrap.className = 'message assistant';
-  const assistantBubble = document.createElement('div');
-  assistantBubble.className = 'message-bubble';
+  // Create assistant message
+  hideWelcome();
+  const wrap = document.createElement('div');
+  wrap.className = 'message assistant';
 
-  // typing indicator
-  assistantBubble.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
-  assistantWrap.appendChild(assistantBubble);
-  messagesEl.appendChild(assistantWrap);
+  const avatar = document.createElement('div');
+  avatar.className = 'avatar';
+  avatar.textContent = 'AI';
+
+  const body = document.createElement('div');
+  body.className = 'message-body';
+
+  const bubble = document.createElement('div');
+  bubble.className = 'message-content';
+  bubble.innerHTML = '<div class="typing"><span></span><span></span><span></span></div>';
+
+  body.appendChild(bubble);
+  wrap.appendChild(avatar);
+  wrap.appendChild(body);
+  messagesEl.appendChild(wrap);
   scrollToBottom();
 
   let fullContent = '';
 
   try {
-    const body = {
-      model: modelSelect.value || undefined,
-      messages: apiMessages,
-      temperature: parseFloat(tempSlider.value),
-      max_tokens: parseInt(tokensSlider.value),
-      stream: useStream,
-    };
-
-    const resp = await fetch(state.serverUrl + '/v1/chat/completions', {
+    const resp = await fetch(API_BASE + '/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        model: modelSelect.value || undefined,
+        messages: apiMessages,
+        temperature: parseFloat(tempSlider.value),
+        max_tokens: parseInt(tokensSlider.value),
+        stream: useStream,
+      }),
       signal: state.abortController.signal,
     });
 
@@ -315,18 +265,18 @@ async function sendMessage() {
             const delta = chunk.choices?.[0]?.delta?.content;
             if (delta) {
               fullContent += delta;
-              assistantBubble.innerHTML = renderMarkdown(fullContent);
-              addCopyButtons(assistantBubble);
+              bubble.innerHTML = renderMarkdown(fullContent);
+              addCopyButtons(bubble);
               scrollToBottom();
             }
-          } catch(e) { /* skip malformed chunk */ }
+          } catch(e) { /* skip */ }
         }
       }
     } else {
       const data = await resp.json();
       fullContent = data.choices?.[0]?.message?.content || '(empty response)';
-      assistantBubble.innerHTML = renderMarkdown(fullContent);
-      addCopyButtons(assistantBubble);
+      bubble.innerHTML = renderMarkdown(fullContent);
+      addCopyButtons(bubble);
       scrollToBottom();
     }
 
@@ -335,39 +285,38 @@ async function sendMessage() {
   } catch (err) {
     if (err.name === 'AbortError') {
       if (fullContent) {
-        // keep partial content
         state.messages.push({ role: 'assistant', content: fullContent });
       } else {
-        assistantBubble.innerHTML = '<em>Stopped.</em>';
+        bubble.innerHTML = '<em>Stopped.</em>';
       }
     } else {
-      assistantBubble.className = 'message-bubble error';
-      assistantBubble.textContent = 'Error: ' + err.message;
-
-      // If connection lost, update status
+      bubble.className = 'message-content error';
+      bubble.textContent = err.message;
       state.connected = false;
       setStatus('disconnected');
+      setTimeout(connect, 3000);
     }
   } finally {
     state.streaming = false;
     state.abortController = null;
     sendBtn.classList.remove('hidden');
     stopBtn.classList.add('hidden');
-    updateSendButton();
+    updateSendBtn();
     scrollToBottom();
   }
 }
 
 function stopStreaming() {
-  if (state.abortController) {
-    state.abortController.abort();
-  }
+  if (state.abortController) state.abortController.abort();
 }
 
-function clearChat() {
+function newChat() {
   state.messages = [];
   messagesEl.innerHTML = '';
-  showWelcome();
+  if (welcome) {
+    welcome.style.display = '';
+    messagesEl.appendChild(welcome);
+  }
 }
 
 // === Sidebar ===
@@ -381,97 +330,51 @@ function closeSidebar() {
   sidebarOverlay.classList.add('hidden');
 }
 
-// === Textarea auto-grow ===
-function autoGrowTextarea() {
+// === Input ===
+function autoGrow() {
   userInput.style.height = 'auto';
-  userInput.style.height = Math.min(userInput.scrollHeight, 120) + 'px';
+  userInput.style.height = Math.min(userInput.scrollHeight, 150) + 'px';
 }
 
-function updateSendButton() {
+function updateSendBtn() {
   sendBtn.disabled = !userInput.value.trim() || !state.connected;
 }
 
-// === Event Listeners ===
+// === Events ===
 function setupListeners() {
-  // Connection banner
-  connectBtn.addEventListener('click', () => attemptConnect(serverUrlInput.value));
-  serverUrlInput.addEventListener('keydown', e => {
-    if (e.key === 'Enter') attemptConnect(serverUrlInput.value);
-  });
+  newChatBtn.addEventListener('click', newChat);
 
-  // Header
-  clearChatBtn.addEventListener('click', clearChat);
-
-  // Sidebar
   sidebarToggle.addEventListener('click', openSidebar);
   sidebarClose.addEventListener('click', closeSidebar);
   sidebarOverlay.addEventListener('click', closeSidebar);
 
-  sidebarConnect.addEventListener('click', () => {
-    attemptConnect(sidebarUrl.value);
-    closeSidebar();
-  });
-
-  // Settings changes
-  tempSlider.addEventListener('input', () => {
-    tempValue.textContent = tempSlider.value;
-    saveSettings();
-  });
-
-  tokensSlider.addEventListener('input', () => {
-    tokensValue.textContent = tokensSlider.value;
-    saveSettings();
-  });
-
+  tempSlider.addEventListener('input', () => { tempValue.textContent = tempSlider.value; saveSettings(); });
+  tokensSlider.addEventListener('input', () => { tokensValue.textContent = tokensSlider.value; saveSettings(); });
   systemPrompt.addEventListener('change', saveSettings);
   streamToggle.addEventListener('change', saveSettings);
 
   clearSettings.addEventListener('click', () => {
-    localStorage.removeItem('lmstudio-settings');
-    state.serverUrl = '';
-    state.connected = false;
-    state.messages = [];
+    localStorage.removeItem('lmstudio-chat-settings');
     systemPrompt.value = '';
-    tempSlider.value = 0.7;
-    tempValue.textContent = '0.7';
-    tokensSlider.value = 2048;
-    tokensValue.textContent = '2048';
+    tempSlider.value = 0.7; tempValue.textContent = '0.7';
+    tokensSlider.value = 2048; tokensValue.textContent = '2048';
     streamToggle.checked = true;
-    setStatus('disconnected');
-    modelSelect.innerHTML = '<option value="">No models</option>';
-    modelSelect.disabled = true;
-    messagesEl.innerHTML = '';
-    showWelcome();
     closeSidebar();
-    banner.classList.remove('hidden');
   });
 
-  // Input
-  userInput.addEventListener('input', () => {
-    autoGrowTextarea();
-    updateSendButton();
-  });
-
+  userInput.addEventListener('input', () => { autoGrow(); updateSendBtn(); });
   userInput.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (!sendBtn.disabled && !state.streaming) {
-        sendMessage();
-      }
+      if (!sendBtn.disabled && !state.streaming) sendMessage();
     }
   });
 
-  sendBtn.addEventListener('click', () => {
-    if (!state.streaming) sendMessage();
-  });
-
+  sendBtn.addEventListener('click', () => { if (!state.streaming) sendMessage(); });
   stopBtn.addEventListener('click', stopStreaming);
 
-  // Keep connection alive — re-check on visibility change
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && state.serverUrl && !state.streaming) {
-      attemptConnect(state.serverUrl.replace(/^https?:\/\//, ''));
-    }
+    if (!document.hidden && !state.connected && !state.streaming) connect();
   });
 }
 

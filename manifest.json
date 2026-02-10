@@ -1,11 +1,11 @@
 {
-  "name": "LM Studio Remote",
-  "short_name": "LM Remote",
-  "description": "Chat with your local LM Studio instance from any device",
+  "name": "LM Studio Chat",
+  "short_name": "LM Chat",
+  "description": "Chat interface for LM Studio",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#1a1a2e",
-  "theme_color": "#1a1a2e",
+  "background_color": "#171717",
+  "theme_color": "#171717",
   "orientation": "any",
   "icons": [
     {
