@@ -1,83 +1,108 @@
 # LM Studio Chat
 
-A chat interface for your local LLM running in [LM Studio](https://lmstudio.ai/). Runs as a desktop app or in the browser.
+A chat interface hosted on GitHub Pages that connects to LM Studio running on your PC. Access it from any browser, anywhere.
 
-## Desktop App (Windows .exe)
+**Live URL:** https://notherobot.github.io/lmstudio-remote-interface/
 
-### Prerequisites
+---
 
-- [Node.js](https://nodejs.org/) v18 or newer
+## How It Works
 
-### Build the exe
-
-```bash
-git clone https://github.com/notherobot/lmstudio-remote-interface.git
-cd lmstudio-remote-interface
-npm install
-npm run build
+```
+Your browser (phone, laptop, anywhere)
+    → loads the page from GitHub Pages
+    → sends chat messages through your tunnel URL
+    → LM Studio on your PC processes them
+    → responses stream back to your browser
 ```
 
-The `.exe` will be in `dist/`. It's a portable executable — no install needed, just double-click it.
+The page is static HTML — all the communication happens directly between your browser and your PC through a tunnel.
 
-### Run in dev mode
+---
+
+## Setup (one-time, ~5 minutes)
+
+### 1. Start LM Studio's Server
+
+1. Open LM Studio on your PC
+2. Load a model
+3. Go to the **Developer** tab
+4. Click **Start Server** (default port `1234`)
+5. Turn on **Enable CORS** in Server Settings
+
+### 2. Expose It with a Tunnel
+
+You need a tunnel so the GitHub Pages site can reach your PC from anywhere. Pick one:
+
+#### Option A: Cloudflare Tunnel (recommended, free)
 
 ```bash
-npm start
+# Install (one-time)
+# Windows: winget install cloudflare.cloudflared
+# Mac: brew install cloudflared
+# Linux: see https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
+
+# Run the tunnel (do this each time)
+cloudflared tunnel --url http://localhost:1234
 ```
 
-## LM Studio Setup
+It prints a URL like `https://something-random.trycloudflare.com` — copy that.
 
-1. Open **LM Studio** and load a model
-2. Go to the **Developer** tab
-3. Click **Start Server** (runs on `127.0.0.1:1234`)
-4. In **Server Settings**, turn on **Enable CORS**
+#### Option B: ngrok (free tier)
 
-The desktop app handles CORS automatically, but if you also use the browser version, CORS needs to be enabled.
+```bash
+# Install from https://ngrok.com/download, then:
+ngrok http 1234
+```
 
-## Browser Version
+It prints a URL like `https://xxxx-xx-xx.ngrok-free.app` — copy that.
 
-You can also just open `index.html` in your browser. Make sure CORS is enabled in LM Studio's Server Settings.
+### 3. Connect
+
+1. Open https://notherobot.github.io/lmstudio-remote-interface/
+2. Paste your tunnel URL
+3. Click **Connect**
+4. Chat
+
+The URL is saved in your browser — next time you just open the page and it reconnects. If the tunnel URL changes (it does for free Cloudflare tunnels), paste the new one.
+
+---
+
+## Using on the Same PC
+
+If you're on the same machine as LM Studio, no tunnel is needed. On the setup screen, click the **localhost:1234** link and you're connected.
+
+---
 
 ## Features
 
 - Streaming responses with stop button
-- Model selector (auto-populated from LM Studio)
+- Model selector (auto-populated)
 - Markdown rendering with code block copy buttons
-- System prompt configuration
-- Temperature and max tokens sliders
+- System prompt, temperature, max tokens
 - New chat button
-- Dark theme
-- Auto-connects and retries if LM Studio isn't running yet
+- Saves connection URL and settings to localStorage
+- Auto-reconnects if connection drops
+- PWA — add to home screen on mobile
+
+---
+
+## Security
+
+- **Your tunnel, your control** — the tunnel runs on your PC and only exposes LM Studio's API port. Stop the tunnel and access is cut.
+- **No middleman** — the GitHub Pages site is static. API calls go directly from your browser to your tunnel to your PC. Nothing is logged or proxied by this app.
+- **Cloudflare tunnels are encrypted** — all traffic is HTTPS end-to-end.
+- **Nothing stored server-side** — your tunnel URL and settings live only in your browser's localStorage.
+
+---
 
 ## Planned
 
 - Voice chat
 - File attachments
-- Android tablet app
-- iOS app
+- Android / iOS native app
 
-## How It Works
-
-The app calls LM Studio's OpenAI-compatible local API:
-- `GET /v1/models` — lists loaded models
-- `POST /v1/chat/completions` — sends messages, streams responses
-
-Everything runs locally. No data leaves your machine.
-
-## Project Structure
-
-```
-├── index.html          # UI (shared across desktop + mobile)
-├── style.css           # Styles
-├── app.js              # Chat logic
-├── marked.min.js       # Markdown renderer
-├── electron/
-│   └── main.js         # Desktop app wrapper
-├── package.json        # Build config
-└── README.md
-```
-
-The web layer (`index.html`, `style.css`, `app.js`) is the shared core — the same code will be wrapped for Android/iOS later.
+---
 
 ## License
 

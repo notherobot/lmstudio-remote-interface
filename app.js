@@ -1,8 +1,6 @@
-// === Config ===
-const API_BASE = 'http://127.0.0.1:1234';
-
 // === State ===
 const state = {
+  apiBase: '',
   connected: false,
   messages: [],
   streaming: false,
@@ -11,6 +9,15 @@ const state = {
 
 // === DOM ===
 const $ = (sel) => document.querySelector(sel);
+const setup          = $('#setup');
+const setupUrl       = $('#setup-url');
+const setupConnect   = $('#setup-connect');
+const setupError     = $('#setup-error');
+const useLocalhost   = $('#use-localhost');
+
+const headerEl       = $('#header');
+const chatContainer  = $('#chat-container');
+const inputArea      = $('#input-area');
 const statusDot      = $('#status-indicator');
 const modelSelect    = $('#model-select');
 const newChatBtn     = $('#new-chat-btn');
@@ -19,18 +26,18 @@ const sidebarToggle  = $('#sidebar-toggle');
 const sidebar        = $('#sidebar');
 const sidebarOverlay = $('#sidebar-overlay');
 const sidebarClose   = $('#sidebar-close');
+const sidebarUrl     = $('#sidebar-url');
+const sidebarReconn  = $('#sidebar-reconnect');
+const disconnectBtn  = $('#disconnect-btn');
 const systemPrompt   = $('#system-prompt');
 const tempSlider     = $('#temperature');
 const tempValue      = $('#temp-value');
 const tokensSlider   = $('#max-tokens');
 const tokensValue    = $('#tokens-value');
 const streamToggle   = $('#stream-toggle');
-const clearSettings  = $('#clear-settings-btn');
 
-const chatContainer  = $('#chat-container');
 const messagesEl     = $('#messages');
 const welcome        = $('#welcome');
-const welcomeStatus  = $('#welcome-status');
 const userInput      = $('#user-input');
 const sendBtn        = $('#send-btn');
 const stopBtn        = $('#stop-btn');
@@ -40,7 +47,15 @@ function init() {
   loadSettings();
   setupListeners();
   autoGrow();
-  connect();
+
+  // If we have a saved URL, skip setup and connect
+  const savedUrl = localStorage.getItem('lmstudio-server-url');
+  if (savedUrl) {
+    state.apiBase = savedUrl;
+    sidebarUrl.value = savedUrl;
+    showChat();
+    connect();
+  }
 }
 
 // === Settings ===
@@ -68,20 +83,28 @@ function saveSettings() {
 }
 
 // === Connection ===
+function normalizeUrl(raw) {
+  let url = raw.trim();
+  if (!url) return '';
+  url = url.replace(/\/+$/, '');
+  if (!/^https?:\/\//i.test(url)) {
+    url = 'http://' + url;
+  }
+  return url;
+}
+
 async function connect() {
   setStatus('connecting');
-  welcomeStatus.textContent = 'Connecting to LM Studio...';
 
   try {
-    const resp = await fetch(API_BASE + '/v1/models', {
-      signal: AbortSignal.timeout(5000),
+    const resp = await fetch(state.apiBase + '/v1/models', {
+      signal: AbortSignal.timeout(10000),
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
 
     const data = await resp.json();
     state.connected = true;
 
-    // Populate models
     modelSelect.innerHTML = '';
     modelSelect.disabled = false;
     const models = data.data || [];
@@ -97,21 +120,87 @@ async function connect() {
     }
 
     setStatus('connected');
-    welcomeStatus.textContent = 'What can I help you with?';
     updateSendBtn();
   } catch (err) {
     setStatus('disconnected');
     state.connected = false;
     modelSelect.innerHTML = '<option value="">Offline</option>';
     modelSelect.disabled = true;
-    welcomeStatus.innerHTML = 'Could not reach LM Studio at <code>127.0.0.1:1234</code><br><span class="hint">Make sure the server is running in the Developer tab</span>';
-    // Retry in 5s
+    // Retry silently
     setTimeout(connect, 5000);
   }
 }
 
+async function tryConnect(rawUrl) {
+  const base = normalizeUrl(rawUrl);
+  if (!base) {
+    showSetupError('Enter a URL');
+    return false;
+  }
+
+  setupConnect.disabled = true;
+  setupConnect.textContent = 'Connecting...';
+  setupError.classList.add('hidden');
+
+  try {
+    const resp = await fetch(base + '/v1/models', {
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    await resp.json();
+
+    // Success — save and enter chat
+    state.apiBase = base;
+    localStorage.setItem('lmstudio-server-url', base);
+    sidebarUrl.value = rawUrl.trim();
+    showChat();
+    connect();
+    return true;
+  } catch (err) {
+    showSetupError('Could not connect. Check the URL and make sure LM Studio\'s server is running with CORS enabled.');
+    return false;
+  } finally {
+    setupConnect.disabled = false;
+    setupConnect.textContent = 'Connect';
+  }
+}
+
+function showSetupError(msg) {
+  setupError.textContent = msg;
+  setupError.classList.remove('hidden');
+}
+
 function setStatus(s) {
   statusDot.className = 'status ' + s;
+}
+
+// === Views ===
+function showChat() {
+  setup.classList.add('hidden');
+  headerEl.classList.remove('hidden');
+  chatContainer.classList.remove('hidden');
+  inputArea.classList.remove('hidden');
+  userInput.focus();
+}
+
+function showSetup() {
+  state.connected = false;
+  state.messages = [];
+  state.apiBase = '';
+  localStorage.removeItem('lmstudio-server-url');
+  setStatus('disconnected');
+  modelSelect.innerHTML = '<option value="">Offline</option>';
+  modelSelect.disabled = true;
+  messagesEl.innerHTML = '';
+  if (welcome) { welcome.style.display = ''; messagesEl.appendChild(welcome); }
+
+  setup.classList.remove('hidden');
+  headerEl.classList.add('hidden');
+  chatContainer.classList.add('hidden');
+  inputArea.classList.add('hidden');
+  setupUrl.value = '';
+  setupError.classList.add('hidden');
+  setupUrl.focus();
 }
 
 // === Chat ===
@@ -186,7 +275,6 @@ async function sendMessage() {
   autoGrow();
   updateSendBtn();
 
-  // Build API messages
   const apiMessages = [];
   const sys = systemPrompt.value.trim();
   if (sys) apiMessages.push({ role: 'system', content: sys });
@@ -198,22 +286,17 @@ async function sendMessage() {
   sendBtn.classList.add('hidden');
   stopBtn.classList.remove('hidden');
 
-  // Create assistant message
   hideWelcome();
   const wrap = document.createElement('div');
   wrap.className = 'message assistant';
-
   const avatar = document.createElement('div');
   avatar.className = 'avatar';
   avatar.textContent = 'AI';
-
   const body = document.createElement('div');
   body.className = 'message-body';
-
   const bubble = document.createElement('div');
   bubble.className = 'message-content';
   bubble.innerHTML = '<div class="typing"><span></span><span></span><span></span></div>';
-
   body.appendChild(bubble);
   wrap.appendChild(avatar);
   wrap.appendChild(body);
@@ -223,7 +306,7 @@ async function sendMessage() {
   let fullContent = '';
 
   try {
-    const resp = await fetch(API_BASE + '/v1/chat/completions', {
+    const resp = await fetch(state.apiBase + '/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -313,10 +396,7 @@ function stopStreaming() {
 function newChat() {
   state.messages = [];
   messagesEl.innerHTML = '';
-  if (welcome) {
-    welcome.style.display = '';
-    messagesEl.appendChild(welcome);
-  }
+  if (welcome) { welcome.style.display = ''; messagesEl.appendChild(welcome); }
 }
 
 // === Sidebar ===
@@ -342,26 +422,45 @@ function updateSendBtn() {
 
 // === Events ===
 function setupListeners() {
-  newChatBtn.addEventListener('click', newChat);
+  // Setup screen
+  setupConnect.addEventListener('click', () => tryConnect(setupUrl.value));
+  setupUrl.addEventListener('keydown', e => {
+    if (e.key === 'Enter') tryConnect(setupUrl.value);
+  });
+  useLocalhost.addEventListener('click', () => {
+    setupUrl.value = 'localhost:1234';
+    tryConnect('localhost:1234');
+  });
 
+  // Sidebar
   sidebarToggle.addEventListener('click', openSidebar);
   sidebarClose.addEventListener('click', closeSidebar);
   sidebarOverlay.addEventListener('click', closeSidebar);
 
+  sidebarReconn.addEventListener('click', () => {
+    const raw = sidebarUrl.value.trim();
+    if (!raw) return;
+    const base = normalizeUrl(raw);
+    state.apiBase = base;
+    state.connected = false;
+    localStorage.setItem('lmstudio-server-url', base);
+    connect();
+    closeSidebar();
+  });
+
+  disconnectBtn.addEventListener('click', () => {
+    closeSidebar();
+    showSetup();
+  });
+
+  // Settings
   tempSlider.addEventListener('input', () => { tempValue.textContent = tempSlider.value; saveSettings(); });
   tokensSlider.addEventListener('input', () => { tokensValue.textContent = tokensSlider.value; saveSettings(); });
   systemPrompt.addEventListener('change', saveSettings);
   streamToggle.addEventListener('change', saveSettings);
 
-  clearSettings.addEventListener('click', () => {
-    localStorage.removeItem('lmstudio-chat-settings');
-    systemPrompt.value = '';
-    tempSlider.value = 0.7; tempValue.textContent = '0.7';
-    tokensSlider.value = 2048; tokensValue.textContent = '2048';
-    streamToggle.checked = true;
-    closeSidebar();
-  });
-
+  // Chat
+  newChatBtn.addEventListener('click', newChat);
   userInput.addEventListener('input', () => { autoGrow(); updateSendBtn(); });
   userInput.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -369,12 +468,12 @@ function setupListeners() {
       if (!sendBtn.disabled && !state.streaming) sendMessage();
     }
   });
-
   sendBtn.addEventListener('click', () => { if (!state.streaming) sendMessage(); });
   stopBtn.addEventListener('click', stopStreaming);
 
+  // Reconnect when tab becomes visible
   document.addEventListener('visibilitychange', () => {
-    if (!document.hidden && !state.connected && !state.streaming) connect();
+    if (!document.hidden && state.apiBase && !state.connected && !state.streaming) connect();
   });
 }
 
