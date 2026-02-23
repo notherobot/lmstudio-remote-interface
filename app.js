@@ -157,7 +157,7 @@ async function tryConnect(rawUrl) {
     connect();
     return true;
   } catch (err) {
-    showSetupError('Could not connect. Check the URL and make sure LM Studio\'s server is running with CORS enabled.');
+    showSetupError('Could not connect. Make sure LM Studio\'s server is running, CORS is enabled, and Tailscale is active on both devices.');
     return false;
   } finally {
     setupConnect.disabled = false;

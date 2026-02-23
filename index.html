@@ -18,12 +18,12 @@
     <div id="setup" class="setup">
       <div class="setup-card">
         <h1>LM Studio Chat</h1>
-        <p class="setup-sub">Connect to your LM Studio server</p>
+        <p class="setup-sub">Enter your Tailscale IP to connect</p>
 
         <div class="setup-field">
-          <label for="setup-url">Server URL</label>
-          <input type="text" id="setup-url" placeholder="https://your-tunnel-url.trycloudflare.com" autocomplete="off" spellcheck="false">
-          <p class="setup-hint">Paste your Cloudflare Tunnel or ngrok URL here.<br>On the same PC? Use <button type="button" class="link-btn" id="use-localhost">localhost:1234</button></p>
+          <label for="setup-url">Tailscale IP + Port</label>
+          <input type="text" id="setup-url" placeholder="100.x.x.x:1234" autocomplete="off" spellcheck="false" inputmode="url">
+          <p class="setup-hint">Find your PC's Tailscale IP in the Tailscale app or at <a href="https://login.tailscale.com/admin/machines" target="_blank" class="link-btn" style="text-decoration:underline;font-size:inherit">login.tailscale.com</a><br>On the same PC? Use <button type="button" class="link-btn" id="use-localhost">localhost:1234</button></p>
         </div>
 
         <button id="setup-connect" class="btn-connect">Connect</button>
@@ -42,8 +42,8 @@
       </div>
       <div class="sidebar-content">
         <div class="setting-group">
-          <label for="sidebar-url">Server URL</label>
-          <input type="text" id="sidebar-url" placeholder="https://..." spellcheck="false">
+          <label for="sidebar-url">Tailscale IP + Port</label>
+          <input type="text" id="sidebar-url" placeholder="100.x.x.x:1234" spellcheck="false">
           <button id="sidebar-reconnect" class="btn-sm">Reconnect</button>
         </div>
         <div class="setting-group">
@@ -108,7 +108,7 @@
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
         </button>
       </div>
-      <p class="input-footer">Powered by your local LM Studio</p>
+      <p class="input-footer">Connected via Tailscale to your LM Studio</p>
     </footer>
   </div>
 
