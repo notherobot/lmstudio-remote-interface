@@ -413,7 +413,7 @@ function closeSidebar() {
 // === Input ===
 function autoGrow() {
   userInput.style.height = 'auto';
-  userInput.style.height = Math.min(userInput.scrollHeight, 150) + 'px';
+  userInput.style.height = Math.min(Math.max(userInput.scrollHeight, 32), 150) + 'px';
 }
 
 function updateSendBtn() {
