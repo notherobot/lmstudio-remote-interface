@@ -755,6 +755,10 @@ header {
   opacity: 0.6;
 }
 
+.version-date {
+  opacity: 0.75;
+}
+
 /* === Composer (attach icons + input) === */
 .composer {
   display: flex;

@@ -1,5 +1,8 @@
 // === Version ===
-const APP_VERSION = 'v0.2.1';
+// Bump both together on every release (keep in sync with sw.js's CACHE_NAME
+// and the ?v= query strings in index.html).
+const APP_VERSION = 'v0.2.2';
+const APP_VERSION_DATE = '2026-07-08';
 
 // === State ===
 const state = {
@@ -74,7 +77,9 @@ const composerEl     = $('.composer');
 
 // === Init ===
 function init() {
-  document.querySelectorAll('.app-version').forEach(el => el.textContent = APP_VERSION);
+  document.querySelectorAll('.app-version').forEach(el => {
+    el.innerHTML = `${escapeHtml(APP_VERSION)} <span class="version-date">· ${escapeHtml(formatVersionDate(APP_VERSION_DATE))}</span>`;
+  });
   loadSettings();
   loadSessions();
   setupListeners();
@@ -148,7 +153,8 @@ async function connect() {
       models.forEach(m => {
         const opt = document.createElement('option');
         opt.value = m.id;
-        opt.textContent = m.id;
+        opt.textContent = prettyModelName(m.id);
+        opt.title = m.id;
         modelSelect.appendChild(opt);
       });
       // Preserve the previously active model across reconnects if still available
@@ -363,7 +369,7 @@ function addModelDivider(modelId) {
   const divider = document.createElement('div');
   divider.className = 'model-divider';
   const label = document.createElement('span');
-  label.textContent = `${modelId} loaded`;
+  label.textContent = `${prettyModelName(modelId)} loaded`;
   divider.appendChild(label);
   messagesEl.appendChild(divider);
   scrollToBottom();
@@ -375,6 +381,66 @@ function onModelChange() {
   state.currentModel = selected;
   addModelDivider(selected);
   refreshModelCaps();
+}
+
+// Best-effort "pretty" display name for a model dropdown entry, e.g.
+// "mistralai/mistral-small-3.2" -> "Mistral Small 3.2 24B". Parsed from the
+// slug alone — there's no API that returns a canonical display name, so this
+// is a heuristic and won't be right for every model. The raw id is always
+// what's actually sent to LM Studio; this only changes what's displayed.
+
+// Parameter-count overrides for well-known families whose slug doesn't
+// include a size token at all (e.g. "mistral-small-3.2" has no "24b" in it).
+// Checked in order — more specific patterns first.
+const MODEL_SIZE_OVERRIDES = [
+  [/mistral-small-3(\.\d+)?\b/i, '24B'],
+  [/mistral-small(?!-3)\b/i, '22B'],
+  [/^codestral(?!.*\d+b)/i, '22B'],
+  [/command-r-plus/i, '104B'],
+  [/command-r(?!-plus)/i, '35B'],
+  [/deepseek-v3(?!.*\d+b)/i, '671B'],
+  [/deepseek-r1(?!-distill)(?!.*\d+b)/i, '671B'],
+];
+
+// Individual slug tokens that should render as a specific display form
+// instead of naive Title Case.
+const MODEL_WORD_OVERRIDES = {
+  deepseek: 'DeepSeek', glm: 'GLM', gpt: 'GPT', qwq: 'QwQ', minicpm: 'MiniCPM',
+  internlm: 'InternLM', smollm: 'SmolLM', wizardlm: 'WizardLM', llm: 'LLM',
+  it: 'Instruct', vl: 'VL', moe: 'MoE',
+};
+
+// Slug tokens that carry no useful display information (quantization/format tags).
+const MODEL_NOISE_RE = /^(gguf|mlx|ggml|awq|gptq|exl2?|hf|safetensors|fp16|fp32|bf16|int4|int8|w4a16|w8a16|q\d(_[a-z0-9]+)*)$/i;
+
+function prettyModelName(id) {
+  if (!id) return id;
+  const slug = id.includes('/') ? id.slice(id.indexOf('/') + 1) : id;
+  const tokens = slug.split(/[-_]/).filter(Boolean);
+
+  // Keep the size token in its natural position (e.g. "32B" before "Instruct")
+  // when the slug has one; only append at the end for override-derived sizes,
+  // which have no natural position since the slug never mentions a size at all.
+  const words = [];
+  let foundSizeInSlug = false;
+  for (const t of tokens) {
+    if (MODEL_NOISE_RE.test(t) || /^\d{4,}$/.test(t)) continue;
+    if (/^(\d+x)?\d+(\.\d+)?b$/i.test(t)) {
+      foundSizeInSlug = true;
+      words.push(t.replace(/b$/i, 'B')); // uppercase only the trailing B, e.g. keep "8x7B" not "8X7B"
+      continue;
+    }
+    const lower = t.toLowerCase();
+    words.push(MODEL_WORD_OVERRIDES[lower] || (t.charAt(0).toUpperCase() + t.slice(1)));
+  }
+
+  if (!foundSizeInSlug) {
+    const override = MODEL_SIZE_OVERRIDES.find(([re]) => re.test(slug));
+    if (override) words.push(override[1]);
+  }
+
+  const pretty = words.join(' ').replace(/\s+/g, ' ').trim();
+  return pretty || id;
 }
 
 // Guess vision support from the model name — used as a fallback when LM Studio's
@@ -430,9 +496,15 @@ function escapeHtml(text) {
   return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+function formatVersionDate(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  if (isNaN(d)) return iso;
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 function modelLoadingHTML(modelId) {
   return `<div class="model-loading">
-    <div class="model-loading-label">Loading <strong>${escapeHtml(modelId)}</strong>…</div>
+    <div class="model-loading-label">Loading <strong>${escapeHtml(prettyModelName(modelId))}</strong>…</div>
     <div class="model-loading-bar"><div class="model-loading-fill"></div></div>
   </div>`;
 }
