@@ -1,5 +1,5 @@
 // === Version ===
-const APP_VERSION = 'v0.0.6';
+const APP_VERSION = 'v0.0.7';
 
 // === State ===
 const state = {
@@ -43,6 +43,7 @@ const tempValue      = $('#temp-value');
 const tokensSlider   = $('#max-tokens');
 const tokensValue    = $('#tokens-value');
 const streamToggle   = $('#stream-toggle');
+const collapseToggle = $('#collapse-toggle');
 
 const messagesEl     = $('#messages');
 const welcome        = $('#welcome');
@@ -91,6 +92,7 @@ function loadSettings() {
     tempSlider.value = s.temperature ?? 0.7;
     tokensSlider.value = s.maxTokens ?? 2048;
     streamToggle.checked = s.stream ?? true;
+    collapseToggle.checked = s.collapseThinking ?? true;
     tempValue.textContent = tempSlider.value;
     tokensValue.textContent = tokensSlider.value;
   } catch(e) { /* ignore */ }
@@ -102,6 +104,7 @@ function saveSettings() {
     temperature: parseFloat(tempSlider.value),
     maxTokens: parseInt(tokensSlider.value),
     stream: streamToggle.checked,
+    collapseThinking: collapseToggle.checked,
   }));
 }
 
@@ -416,33 +419,78 @@ function renderMarkdown(text) {
 }
 
 // Wrap reasoning ("thinking") in a collapsed <details> dropdown, leaving the
-// answer rendered normally. Handles <think>/<thinking> tags, including a
-// still-open block mid-stream.
+// answer rendered normally. Handles <think>/<thinking> tags (including a
+// still-open block mid-stream) and un-tagged "thinking out loud" output.
 function renderMessage(text) {
-  const THINK_RE = /<think(?:ing)?>([\s\S]*?)<\/think(?:ing)?>/gi;
-  let html = '';
-  let lastIndex = 0;
-  let m;
-  while ((m = THINK_RE.exec(text)) !== null) {
-    const before = text.slice(lastIndex, m.index);
-    if (before.trim()) html += renderMarkdown(before);
-    html += thinkBlock(m[1], false);
-    lastIndex = THINK_RE.lastIndex;
+  if (collapseToggle && !collapseToggle.checked) return renderMarkdown(text);
+
+  // Tag-delimited reasoning (<think>…</think>)
+  if (/<think(?:ing)?>/i.test(text)) {
+    const THINK_RE = /<think(?:ing)?>([\s\S]*?)<\/think(?:ing)?>/gi;
+    let html = '';
+    let lastIndex = 0;
+    let m;
+    while ((m = THINK_RE.exec(text)) !== null) {
+      const before = text.slice(lastIndex, m.index);
+      if (before.trim()) html += renderMarkdown(before);
+      html += thinkBlock(m[1], false);
+      lastIndex = THINK_RE.lastIndex;
+    }
+    const rest = text.slice(lastIndex);
+    const openIdx = rest.search(/<think(?:ing)?>/i);
+    if (openIdx !== -1) {
+      const before = rest.slice(0, openIdx);
+      if (before.trim()) html += renderMarkdown(before);
+      const inner = rest.slice(openIdx).replace(/^<think(?:ing)?>/i, '');
+      html += thinkBlock(inner, true);
+    } else if (rest.trim()) {
+      html += renderMarkdown(rest);
+    }
+    return html || renderMarkdown(text);
   }
 
-  const rest = text.slice(lastIndex);
-  const openIdx = rest.search(/<think(?:ing)?>/i);
-  if (openIdx !== -1) {
-    // An unclosed reasoning block — everything after it is still-streaming thought
-    const before = rest.slice(0, openIdx);
-    if (before.trim()) html += renderMarkdown(before);
-    const inner = rest.slice(openIdx).replace(/^<think(?:ing)?>/i, '');
-    html += thinkBlock(inner, true);
-  } else if (rest.trim()) {
-    html += renderMarkdown(rest);
+  // Un-tagged reasoning: models that "think out loud" in plain text
+  const ff = detectFreeformReasoning(text);
+  if (ff) {
+    let html = thinkBlock(ff.reasoning, false);
+    if (ff.answer.trim()) html += renderMarkdown(ff.answer.trim());
+    return html;
   }
 
-  return html || renderMarkdown(text);
+  return renderMarkdown(text);
+}
+
+// Some models emit their chain-of-thought as plain prose (no tags), typically
+// opening with a recognizable preamble and closing with a final-answer heading.
+// Detect that shape and split reasoning from the answer.
+const REASON_PREAMBLE = /^(?:\s*(?:>|#{1,4})?\s*)?(?:okay[,]?\s+)?(here'?s\s+(?:a|my)\s+(?:thinking|thought|reasoning)(?:\s+process)?|(?:my\s+)?(?:thinking|thought)\s+process\b|reasoning\s*:|let'?s\s+think\b|let\s+me\s+think\b)/i;
+const ANSWER_MARKER = /^\s{0,3}(?:[-*]|\d+[.)])?\s*(?:#{1,4}\s*)?(?:\*\*)?\s*(?:final\s+response|final\s+answer|draft\s+response|my\s+(?:response|answer)|response|answer|output|reply)\b\s*[:.\-–—)]*\s*(.*)$/i;
+
+function detectFreeformReasoning(text) {
+  if (!REASON_PREAMBLE.test(text)) return null;
+
+  const lines = text.split('\n');
+  let markerLine = -1;
+  let inlineAnswer = '';
+  for (let i = 0; i < lines.length; i++) {
+    const mm = lines[i].match(ANSWER_MARKER);
+    if (mm) {
+      markerLine = i; // keep the last marker
+      const trail = (mm[1] || '').trim();
+      // Ignore trailing heading fragments like "(Mental Refinement):"
+      inlineAnswer = (!trail || /^[([]/.test(trail) || trail.endsWith(':')) ? '' : trail;
+    }
+  }
+
+  if (markerLine === -1) {
+    // Preamble but no clear answer boundary — collapse the whole thing
+    return { reasoning: text, answer: '' };
+  }
+
+  const reasoning = lines.slice(0, markerLine).join('\n');
+  const after = lines.slice(markerLine + 1).join('\n');
+  const answer = (inlineAnswer ? inlineAnswer + '\n' : '') + after;
+  return { reasoning, answer };
 }
 
 function thinkBlock(inner, streaming) {
@@ -960,6 +1008,7 @@ function setupListeners() {
   tokensSlider.addEventListener('input', () => { tokensValue.textContent = tokensSlider.value; saveSettings(); });
   systemPrompt.addEventListener('change', saveSettings);
   streamToggle.addEventListener('change', saveSettings);
+  collapseToggle.addEventListener('change', saveSettings);
 
   // Chat
   modelSelect.addEventListener('change', onModelChange);

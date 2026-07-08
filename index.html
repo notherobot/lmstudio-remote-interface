@@ -9,7 +9,7 @@
   <title>LM Studio Chat</title>
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="style.css?v=0.0.6">
+  <link rel="stylesheet" href="style.css?v=0.0.7">
 </head>
 <body>
   <div id="app">
@@ -63,6 +63,12 @@
           <label class="checkbox-row">
             <input type="checkbox" id="stream-toggle" checked>
             <span>Stream responses</span>
+          </label>
+        </div>
+        <div class="setting-group">
+          <label class="checkbox-row">
+            <input type="checkbox" id="collapse-toggle" checked>
+            <span>Collapse model thinking</span>
           </label>
         </div>
         <div class="setting-group">
@@ -147,6 +153,6 @@
   </div>
 
   <script src="marked.min.js"></script>
-  <script src="app.js?v=0.0.6"></script>
+  <script src="app.js?v=0.0.7"></script>
 </body>
 </html>
