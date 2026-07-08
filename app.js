@@ -1,3 +1,6 @@
+// === Version ===
+const APP_VERSION = 'v0.0.1';
+
 // === State ===
 const state = {
   apiBase: '',
@@ -5,6 +8,7 @@ const state = {
   messages: [],
   streaming: false,
   abortController: null,
+  currentModel: null,
 };
 
 // === DOM ===
@@ -44,6 +48,7 @@ const stopBtn        = $('#stop-btn');
 
 // === Init ===
 function init() {
+  document.querySelectorAll('.app-version').forEach(el => el.textContent = APP_VERSION);
   loadSettings();
   setupListeners();
   autoGrow();
@@ -105,6 +110,7 @@ async function connect() {
     const data = await resp.json();
     state.connected = true;
 
+    const prevModel = state.currentModel;
     modelSelect.innerHTML = '';
     modelSelect.disabled = false;
     const models = data.data || [];
@@ -117,7 +123,13 @@ async function connect() {
         opt.textContent = m.id;
         modelSelect.appendChild(opt);
       });
+      // Preserve the previously active model across reconnects if still available
+      if (prevModel && models.some(m => m.id === prevModel)) {
+        modelSelect.value = prevModel;
+      }
     }
+    // Track the active model silently (no notification on initial connect/reconnect)
+    state.currentModel = modelSelect.value || null;
 
     setStatus('connected');
     updateSendBtn();
@@ -236,6 +248,24 @@ function addMessage(role, content, isError) {
   addCopyButtons(bubble);
   scrollToBottom();
   return bubble;
+}
+
+function addModelDivider(modelId) {
+  hideWelcome();
+  const divider = document.createElement('div');
+  divider.className = 'model-divider';
+  const label = document.createElement('span');
+  label.textContent = `${modelId} loaded`;
+  divider.appendChild(label);
+  messagesEl.appendChild(divider);
+  scrollToBottom();
+}
+
+function onModelChange() {
+  const selected = modelSelect.value;
+  if (!selected || selected === state.currentModel) return;
+  state.currentModel = selected;
+  addModelDivider(selected);
 }
 
 function renderMarkdown(text) {
@@ -460,6 +490,7 @@ function setupListeners() {
   streamToggle.addEventListener('change', saveSettings);
 
   // Chat
+  modelSelect.addEventListener('change', onModelChange);
   newChatBtn.addEventListener('click', newChat);
   userInput.addEventListener('input', () => { autoGrow(); updateSendBtn(); });
   userInput.addEventListener('keydown', e => {

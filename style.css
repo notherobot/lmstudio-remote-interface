@@ -382,6 +382,33 @@ header {
   font-size: 1.1rem;
 }
 
+/* === Model switch divider === */
+.model-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  margin: 4px 0;
+  animation: fadeIn 0.2s ease;
+}
+
+.model-divider::before,
+.model-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.model-divider span {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 /* === Messages === */
 .message {
   display: flex;
@@ -616,6 +643,21 @@ header {
   font-size: 0.72rem;
   color: var(--text-muted);
   margin-top: 8px;
+}
+
+/* === Version label === */
+.app-version {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  opacity: 0.7;
+}
+
+.setup-card .app-version {
+  margin-top: 24px;
+}
+
+.input-footer .app-version {
+  opacity: 0.6;
 }
 
 .hidden { display: none !important; }
