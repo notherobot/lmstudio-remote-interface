@@ -1,5 +1,5 @@
 // === Version ===
-const APP_VERSION = 'v0.0.5';
+const APP_VERSION = 'v0.0.6';
 
 // === State ===
 const state = {
