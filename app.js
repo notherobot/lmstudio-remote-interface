@@ -1,5 +1,5 @@
 // === Version ===
-const APP_VERSION = 'v0.1.1';
+const APP_VERSION = 'v0.2.0';
 
 // === State ===
 const state = {
@@ -10,6 +10,7 @@ const state = {
   abortController: null,
   currentModel: null,
   modelCaps: { vision: false },
+  modelMeta: {},          // { [modelId]: { type: 'llm'|'vlm'|... } } from /api/v0/models
   attachments: [],       // pending uploads: { kind:'image'|'file', name, size, url?, text? }
   sessions: [],          // saved chat sessions
   currentSessionId: null,
@@ -46,6 +47,7 @@ const tokensSlider   = $('#max-tokens');
 const tokensValue    = $('#tokens-value');
 const streamToggle   = $('#stream-toggle');
 const collapseToggle = $('#collapse-toggle');
+const routingToggle  = $('#routing-toggle');
 
 const messagesEl     = $('#messages');
 const welcome        = $('#welcome');
@@ -98,6 +100,7 @@ function loadSettings() {
     tokensSlider.value = s.maxTokens ?? 2048;
     streamToggle.checked = s.stream ?? true;
     collapseToggle.checked = s.collapseThinking ?? true;
+    routingToggle.checked = s.smartRouting ?? true;
     tempValue.textContent = tempSlider.value;
     tokensValue.textContent = tokensSlider.value;
   } catch(e) { /* ignore */ }
@@ -110,6 +113,7 @@ function saveSettings() {
     maxTokens: parseInt(tokensSlider.value),
     stream: streamToggle.checked,
     collapseThinking: collapseToggle.checked,
+    smartRouting: routingToggle.checked,
   }));
 }
 
@@ -156,6 +160,7 @@ async function connect() {
     }
     // Track the active model silently (no notification on initial connect/reconnect)
     state.currentModel = modelSelect.value || null;
+    await refreshModelMeta();
     refreshModelCaps();
 
     setStatus('connected');
@@ -389,22 +394,69 @@ function nameSuggestsVision(modelId) {
   return patterns.some(p => id.includes(p));
 }
 
-// Detect capabilities of the active model and show/hide the image button.
-async function refreshModelCaps() {
-  const model = modelSelect.value;
-  let vision = nameSuggestsVision(model);
-
-  // Prefer LM Studio's native API, which reports model type ("vlm" = vision).
+// Fetch type info ("llm" / "vlm" / ...) for every downloaded model in one shot,
+// via LM Studio's native API. Powers both capability detection and routing.
+async function refreshModelMeta() {
   try {
     const resp = await fetch(state.apiBase + '/api/v0/models', { signal: AbortSignal.timeout(4000) });
     if (resp.ok) {
       const data = await resp.json();
-      const entry = (data.data || []).find(m => m.id === model);
-      if (entry && typeof entry.type === 'string') {
-        vision = entry.type.toLowerCase() === 'vlm';
-      }
+      const meta = {};
+      (data.data || []).forEach(m => { meta[m.id] = { type: (m.type || '').toLowerCase() }; });
+      state.modelMeta = meta;
     }
-  } catch (e) { /* endpoint unavailable — keep the name-based guess */ }
+  } catch (e) { /* endpoint unavailable — routing/caps fall back to name heuristics */ }
+}
+
+function modelType(id) {
+  return state.modelMeta[id]?.type || (nameSuggestsVision(id) ? 'vlm' : '');
+}
+
+// Guess coding-model support from the name — there's no "type" for this in
+// LM Studio's API, so name matching is the only signal available.
+function nameSuggestsCoder(modelId) {
+  const id = (modelId || '').toLowerCase();
+  const patterns = [
+    'coder', 'code-', '-code', 'codellama', 'starcoder', 'codestral',
+    'codegemma', 'granite-code', 'stable-code', 'wizardcoder', 'opencoder',
+    'deepseek-coder', 'codeqwen',
+  ];
+  return patterns.some(p => id.includes(p));
+}
+
+// Loose signal that a prompt is primarily a coding task — code fences, common
+// programming verbs/errors, or "in <language> ... code/function/script".
+const CODE_SIGNAL_RE = /```|\b(function|refactor|debugg?ing?|regex|compile|stack ?trace|traceback|syntax error|unit test|null ?pointer|segfault|boilerplate)\b|\b(javascript|typescript|python|java|c\+\+|c#|golang|rust|php|ruby|sql|html|css|bash|powershell)\b[^.!?\n]{0,25}\b(code|script|function|snippet|program|class)\b/i;
+
+// Pick the best available model for this prompt. Only overrides the current
+// selection when there's a strong, specific signal — an attached image needs
+// a vision model, or the prompt clearly wants code and a dedicated coder
+// model is available. Otherwise keeps whatever is already loaded, since
+// swapping models costs real reload time.
+function pickModelForPrompt(text, attachments) {
+  const options = [...modelSelect.options].map(o => o.value).filter(Boolean);
+  const current = modelSelect.value;
+  if (!options.length) return current;
+
+  if (attachments.some(a => a.kind === 'image')) {
+    if (modelType(current) === 'vlm') return current;
+    const visionModel = options.find(id => modelType(id) === 'vlm');
+    return visionModel || current; // no vision model available — leave it, LM Studio/error path will explain
+  }
+
+  if (CODE_SIGNAL_RE.test(text)) {
+    if (nameSuggestsCoder(current)) return current;
+    const coderModel = options.find(id => nameSuggestsCoder(id));
+    if (coderModel) return coderModel;
+  }
+
+  return current;
+}
+
+// Detect capabilities of the active model and show/hide the image button.
+function refreshModelCaps() {
+  const model = modelSelect.value;
+  const vision = modelType(model) === 'vlm';
 
   state.modelCaps.vision = vision;
   attachImageBtn.classList.toggle('hidden', !vision);
@@ -415,6 +467,17 @@ async function refreshModelCaps() {
     renderAttachments();
     updateSendBtn();
   }
+}
+
+function escapeHtml(text) {
+  return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function modelLoadingHTML(modelId) {
+  return `<div class="model-loading">
+    <div class="model-loading-label">Loading <strong>${escapeHtml(modelId)}</strong>…</div>
+    <div class="model-loading-bar"><div class="model-loading-fill"></div></div>
+  </div>`;
 }
 
 function renderMarkdown(text) {
@@ -596,6 +659,18 @@ async function sendMessage() {
   updateSendBtn();
   saveCurrentSession();
 
+  // Smart routing: switch to a different model when the prompt clearly calls
+  // for one (vision needed, or a dedicated coder model exists for code-heavy
+  // asks). Otherwise stays on whatever's already loaded.
+  const targetModel = routingToggle.checked ? pickModelForPrompt(text, attachments) : modelSelect.value;
+  const isModelSwitch = !!targetModel && targetModel !== state.currentModel;
+  if (isModelSwitch) {
+    modelSelect.value = targetModel;
+    state.currentModel = targetModel;
+    addModelDivider(targetModel);
+    refreshModelCaps();
+  }
+
   const apiMessages = [];
   const sys = systemPrompt.value.trim();
   if (sys) apiMessages.push({ role: 'system', content: sys });
@@ -617,7 +692,11 @@ async function sendMessage() {
   body.className = 'message-body';
   const bubble = document.createElement('div');
   bubble.className = 'message-content';
-  bubble.innerHTML = '<div class="typing"><span></span><span></span><span></span></div>';
+  // A model switch shows a distinct loading bar (load + queue time is
+  // unpredictable); otherwise the usual typing dots for generation.
+  bubble.innerHTML = isModelSwitch
+    ? modelLoadingHTML(targetModel)
+    : '<div class="typing"><span></span><span></span><span></span></div>';
   body.appendChild(bubble);
   wrap.appendChild(avatar);
   wrap.appendChild(body);
@@ -1225,6 +1304,7 @@ function setupListeners() {
   systemPrompt.addEventListener('change', saveSettings);
   streamToggle.addEventListener('change', saveSettings);
   collapseToggle.addEventListener('change', saveSettings);
+  routingToggle.addEventListener('change', saveSettings);
 
   // Chat
   modelSelect.addEventListener('change', onModelChange);
