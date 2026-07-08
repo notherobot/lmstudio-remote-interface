@@ -1,4 +1,5 @@
-const CACHE_NAME = 'lmstudio-remote-v1';
+// Bump this on every release so old caches are purged (keep in sync with APP_VERSION in app.js)
+const CACHE_NAME = 'lmstudio-remote-v0.0.1';
 const ASSETS = [
   './',
   './index.html',
@@ -30,7 +31,8 @@ self.addEventListener('activate', event => {
   );
 });
 
-// Fetch — cache-first for app shell, network-first for API calls
+// Fetch — network-first for the app shell (so deploys show up immediately),
+// falling back to cache only when offline. API calls are left untouched.
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
@@ -40,7 +42,15 @@ self.addEventListener('fetch', event => {
   }
 
   event.respondWith(
-    caches.match(event.request)
-      .then(cached => cached || fetch(event.request))
+    fetch(event.request)
+      .then(resp => {
+        // Refresh the cached copy for offline use
+        if (resp && resp.status === 200 && resp.type === 'basic') {
+          const copy = resp.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
+        }
+        return resp;
+      })
+      .catch(() => caches.match(event.request))
   );
 });
