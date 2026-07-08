@@ -1,5 +1,5 @@
 // === Version ===
-const APP_VERSION = 'v0.1.0';
+const APP_VERSION = 'v0.1.1';
 
 // === State ===
 const state = {
@@ -13,6 +13,7 @@ const state = {
   attachments: [],       // pending uploads: { kind:'image'|'file', name, size, url?, text? }
   sessions: [],          // saved chat sessions
   currentSessionId: null,
+  stickToBottom: true,   // auto-scroll only while the user is at the bottom
 };
 
 // === DOM ===
@@ -65,6 +66,9 @@ const historyClose   = $('#history-close');
 const historyNew     = $('#history-new');
 const historyList    = $('#history-list');
 const historyEmpty   = $('#history-empty');
+const historySearch  = $('#history-search');
+const scrollPill     = $('#scroll-pill');
+const composerEl     = $('.composer');
 
 // === Init ===
 function init() {
@@ -553,8 +557,29 @@ function addCopyButtons(el) {
   });
 }
 
-function scrollToBottom() {
-  chatContainer.scrollTop = chatContainer.scrollHeight;
+// Tokens + speed line under a response. Uses server-reported usage when
+// available; otherwise estimates from streamed delta count (marked with ~).
+function appendStats(body, { tStart, firstTokenAt, deltaCount, usage }) {
+  const tokens = usage?.completion_tokens ?? deltaCount;
+  if (!tokens || tokens <= 0) return;
+  const exact = usage?.completion_tokens != null;
+  const elapsed = (performance.now() - (firstTokenAt || tStart)) / 1000;
+  const speed = tokens / Math.max(elapsed, 0.001);
+  const el = document.createElement('div');
+  el.className = 'msg-stats';
+  el.textContent = `${exact ? '' : '~'}${tokens} tokens · ${speed.toFixed(1)} tok/s`;
+  body.appendChild(el);
+}
+
+function scrollToBottom(force) {
+  if (force) state.stickToBottom = true;
+  if (state.stickToBottom) chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+function onChatScroll() {
+  const gap = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight;
+  state.stickToBottom = gap < 80;
+  scrollPill.classList.toggle('hidden', state.stickToBottom);
 }
 
 async function sendMessage() {
@@ -597,10 +622,16 @@ async function sendMessage() {
   wrap.appendChild(avatar);
   wrap.appendChild(body);
   messagesEl.appendChild(wrap);
-  scrollToBottom();
+  scrollToBottom(true);
 
   let fullContent = '';
   let reasoning = '';
+
+  // Response stats: delta count approximates tokens when the server doesn't report usage
+  const tStart = performance.now();
+  let firstTokenAt = 0;
+  let deltaCount = 0;
+  let usage = null;
 
   // Combine separate reasoning (LM Studio's reasoning_content) with the answer
   // so renderMessage can wrap it as a collapsible block. Inline <think> tags
@@ -648,11 +679,14 @@ async function sendMessage() {
 
           try {
             const chunk = JSON.parse(data);
+            if (chunk.usage) usage = chunk.usage;
             const delta = chunk.choices?.[0]?.delta || {};
             let changed = false;
             if (delta.reasoning_content) { reasoning += delta.reasoning_content; changed = true; }
             if (delta.content) { fullContent += delta.content; changed = true; }
             if (changed) {
+              if (!firstTokenAt) firstTokenAt = performance.now();
+              deltaCount++;
               bubble.innerHTML = renderMessage(withReasoning(), true);
               addCopyButtons(bubble);
               scrollToBottom();
@@ -668,6 +702,7 @@ async function sendMessage() {
       scrollToBottom();
     } else {
       const data = await resp.json();
+      usage = data.usage || null;
       const msg = data.choices?.[0]?.message || {};
       reasoning = msg.reasoning_content || '';
       fullContent = msg.content || '(empty response)';
@@ -676,12 +711,14 @@ async function sendMessage() {
       scrollToBottom();
     }
 
+    appendStats(body, { tStart, firstTokenAt, deltaCount, usage });
     state.messages.push({ role: 'assistant', content: fullContent });
     saveCurrentSession();
 
   } catch (err) {
     if (err.name === 'AbortError') {
       if (fullContent) {
+        appendStats(body, { tStart, firstTokenAt, deltaCount, usage });
         state.messages.push({ role: 'assistant', content: fullContent });
         saveCurrentSession();
       } else {
@@ -767,8 +804,13 @@ function saveCurrentSession() {
     state.currentSessionId = session.id;
   }
   session.messages = state.messages;
-  session.title = sessionTitle(state.messages);
+  if (!session.customTitle) session.title = sessionTitle(state.messages);
   session.model = state.currentModel;
+  session.settings = {
+    temperature: parseFloat(tempSlider.value),
+    maxTokens: parseInt(tokensSlider.value),
+    systemPrompt: systemPrompt.value,
+  };
   session.updatedAt = now;
   // Keep the active session at the top, newest-first
   state.sessions = [session, ...state.sessions.filter(s => s.id !== session.id)];
@@ -784,13 +826,36 @@ function loadSession(id) {
   state.messages = JSON.parse(JSON.stringify(session.messages || []));
   clearAttachments();
 
+  // Restore the chat's model if it's still loaded in LM Studio
+  if (session.model && [...modelSelect.options].some(o => o.value === session.model)) {
+    modelSelect.value = session.model;
+    state.currentModel = session.model;
+    refreshModelCaps();
+  }
+  // Restore the chat's settings
+  if (session.settings) {
+    const st = session.settings;
+    if (st.temperature != null) { tempSlider.value = st.temperature; tempValue.textContent = tempSlider.value; }
+    if (st.maxTokens != null) { tokensSlider.value = st.maxTokens; tokensValue.textContent = tokensSlider.value; }
+    if (st.systemPrompt != null) systemPrompt.value = st.systemPrompt;
+    saveSettings();
+  }
+
   messagesEl.innerHTML = '';
   if (welcome) { welcome.style.display = 'none'; messagesEl.appendChild(welcome); }
   state.messages.forEach(renderStoredMessage);
-  scrollToBottom();
+  scrollToBottom(true);
 
-  closeHistory();
-  renderHistoryList();
+  // Keep the sidebar open on desktop (push mode); close it on phones
+  if (window.innerWidth < 768) closeHistory();
+  // Update highlight in place — rebuilding the list here would destroy the
+  // title node mid-double-click and break rename.
+  updateActiveHistoryItem();
+}
+
+function updateActiveHistoryItem() {
+  historyList.querySelectorAll('.history-item').forEach(li =>
+    li.classList.toggle('active', li.dataset.id === state.currentSessionId));
 }
 
 function deleteSession(id) {
@@ -813,41 +878,136 @@ function relTime(ts) {
 }
 
 const TRASH_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>';
+const PIN_SVG = (filled) => `<svg width="15" height="15" viewBox="0 0 24 24" fill="${filled ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2"><path d="M12 17v5"/><path d="M9 10.76V7a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3.76a2 2 0 0 0 .59 1.42l1.7 1.7a1 1 0 0 1-.7 1.7H6.41a1 1 0 0 1-.7-1.7l1.7-1.7A2 2 0 0 0 8 10.76z"/></svg>`;
+
+function togglePin(id) {
+  const s = state.sessions.find(x => x.id === id);
+  if (!s) return;
+  s.pinned = !s.pinned;
+  persistSessions();
+  renderHistoryList();
+}
+
+function startRename(session, titleEl) {
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = session.title || '';
+  titleEl.textContent = '';
+  titleEl.appendChild(input);
+  input.focus();
+  input.select();
+
+  let done = false;
+  const commit = (save) => {
+    if (done) return;
+    done = true;
+    const v = input.value.trim();
+    if (save && v && v !== session.title) {
+      session.title = v.slice(0, 80);
+      session.customTitle = true;
+      persistSessions();
+    }
+    input.remove(); // must go before re-render: the rename guard checks for it
+    renderHistoryList();
+  };
+  input.addEventListener('click', e => e.stopPropagation());
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') commit(true);
+    else if (e.key === 'Escape') commit(false);
+  });
+  input.addEventListener('blur', () => commit(true));
+}
+
+// Bucket sessions Claude-style: Pinned, Today, Yesterday, Previous 7 days, Older.
+function groupSessions(sessions) {
+  const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
+  const dayMs = 86400000;
+  const yesterday = startOfToday.getTime() - dayMs;
+  const weekAgo = startOfToday.getTime() - 7 * dayMs;
+
+  const groups = [
+    { label: 'Pinned', items: [] },
+    { label: 'Today', items: [] },
+    { label: 'Yesterday', items: [] },
+    { label: 'Previous 7 days', items: [] },
+    { label: 'Older', items: [] },
+  ];
+  sessions.forEach(s => {
+    if (s.pinned) return groups[0].items.push(s);
+    const t = s.updatedAt || s.createdAt || 0;
+    if (t >= startOfToday.getTime()) groups[1].items.push(s);
+    else if (t >= yesterday) groups[2].items.push(s);
+    else if (t >= weekAgo) groups[3].items.push(s);
+    else groups[4].items.push(s);
+  });
+  return groups.filter(g => g.items.length);
+}
 
 function renderHistoryList() {
   if (!historyList) return;
+  // Don't rebuild while a rename is in progress — it would destroy the input
+  const renaming = historyList.querySelector('.history-item-title input');
+  if (renaming && document.activeElement === renaming) return;
   historyList.innerHTML = '';
-  if (!state.sessions.length) {
+
+  const q = (historySearch?.value || '').trim().toLowerCase();
+  let sessions = state.sessions;
+  if (q) {
+    sessions = sessions.filter(s =>
+      (s.title || '').toLowerCase().includes(q) ||
+      (s.messages || []).some(m => extractText(m.content).toLowerCase().includes(q))
+    );
+  }
+
+  if (!sessions.length) {
+    historyEmpty.textContent = q ? 'No matching chats.' : 'No saved chats yet.';
     historyEmpty.classList.remove('hidden');
     return;
   }
   historyEmpty.classList.add('hidden');
 
-  state.sessions.forEach(session => {
-    const li = document.createElement('li');
-    li.className = 'history-item' + (session.id === state.currentSessionId ? ' active' : '');
+  groupSessions(sessions).forEach(group => {
+    const header = document.createElement('li');
+    header.className = 'history-group';
+    header.textContent = group.label;
+    historyList.appendChild(header);
 
-    const main = document.createElement('div');
-    main.className = 'history-item-main';
-    const title = document.createElement('div');
-    title.className = 'history-item-title';
-    title.textContent = session.title || 'New chat';
-    const time = document.createElement('div');
-    time.className = 'history-item-time';
-    time.textContent = relTime(session.updatedAt);
-    main.appendChild(title);
-    main.appendChild(time);
-    main.addEventListener('click', () => loadSession(session.id));
+    group.items.forEach(session => {
+      const li = document.createElement('li');
+      li.className = 'history-item' + (session.id === state.currentSessionId ? ' active' : '');
+      li.dataset.id = session.id;
 
-    const del = document.createElement('button');
-    del.className = 'history-delete';
-    del.setAttribute('aria-label', 'Delete chat');
-    del.innerHTML = TRASH_SVG;
-    del.addEventListener('click', e => { e.stopPropagation(); deleteSession(session.id); });
+      const main = document.createElement('div');
+      main.className = 'history-item-main';
+      const title = document.createElement('div');
+      title.className = 'history-item-title';
+      title.textContent = session.title || 'New chat';
+      title.title = 'Double-click to rename';
+      title.addEventListener('dblclick', e => { e.stopPropagation(); startRename(session, title); });
+      const time = document.createElement('div');
+      time.className = 'history-item-time';
+      time.textContent = relTime(session.updatedAt);
+      main.appendChild(title);
+      main.appendChild(time);
+      main.addEventListener('click', () => loadSession(session.id));
 
-    li.appendChild(main);
-    li.appendChild(del);
-    historyList.appendChild(li);
+      const pin = document.createElement('button');
+      pin.className = 'history-pin' + (session.pinned ? ' pinned' : '');
+      pin.setAttribute('aria-label', session.pinned ? 'Unpin chat' : 'Pin chat');
+      pin.innerHTML = PIN_SVG(!!session.pinned);
+      pin.addEventListener('click', e => { e.stopPropagation(); togglePin(session.id); });
+
+      const del = document.createElement('button');
+      del.className = 'history-delete';
+      del.setAttribute('aria-label', 'Delete chat');
+      del.innerHTML = TRASH_SVG;
+      del.addEventListener('click', e => { e.stopPropagation(); deleteSession(session.id); });
+
+      li.appendChild(main);
+      li.appendChild(pin);
+      li.appendChild(del);
+      historyList.appendChild(li);
+    });
   });
 }
 
@@ -919,8 +1079,14 @@ async function handleImageFiles(files) {
   updateSendBtn();
 }
 
+const TEXT_FILE_RE = /\.(txt|md|markdown|json|csv|tsv|log|js|jsx|ts|tsx|py|html?|css|scss|xml|ya?ml|toml|ini|sh|bash|java|c|h|cpp|hpp|cs|go|rs|rb|php|sql|swift|kt|r)$/i;
+
 async function handleTextFiles(files) {
   for (const file of files) {
+    if (!file.type.startsWith('text/') && !TEXT_FILE_RE.test(file.name)) {
+      alert(`"${file.name}" isn't a supported text file and was skipped.`);
+      continue;
+    }
     if (file.size > MAX_FILE_BYTES) {
       alert(`"${file.name}" is larger than 1 MB and was skipped.`);
       continue;
@@ -1091,7 +1257,35 @@ function setupListeners() {
   historyBtn.addEventListener('click', toggleHistory);
   historyClose.addEventListener('click', closeHistory);
   historyOverlay.addEventListener('click', closeHistory);
-  historyNew.addEventListener('click', () => { newChat(); closeHistory(); });
+  historyNew.addEventListener('click', () => { newChat(); if (window.innerWidth < 768) closeHistory(); });
+  historySearch.addEventListener('input', renderHistoryList);
+
+  // Scroll position / pill
+  chatContainer.addEventListener('scroll', onChatScroll);
+  scrollPill.addEventListener('click', () => scrollToBottom(true));
+
+  // Drag-and-drop attachments (anywhere on the page)
+  document.addEventListener('dragover', e => {
+    e.preventDefault();
+    if (state.connected) composerEl.classList.add('drag-over');
+  });
+  document.addEventListener('dragleave', e => {
+    if (!e.relatedTarget) composerEl.classList.remove('drag-over');
+  });
+  document.addEventListener('drop', e => {
+    e.preventDefault();
+    composerEl.classList.remove('drag-over');
+    if (!state.connected) return;
+    const files = [...(e.dataTransfer?.files || [])];
+    if (!files.length) return;
+    const images = files.filter(f => f.type.startsWith('image/'));
+    const texts = files.filter(f => !f.type.startsWith('image/'));
+    if (images.length) {
+      if (state.modelCaps.vision) handleImageFiles(images);
+      else alert('The current model doesn\'t support images.');
+    }
+    if (texts.length) handleTextFiles(texts);
+  });
 
   // Reconnect when tab becomes visible
   document.addEventListener('visibilitychange', () => {
