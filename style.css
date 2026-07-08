@@ -652,10 +652,12 @@ header {
   font-size: 16px;
   line-height: 1.5;
   resize: none;
+  min-height: 26px;
   max-height: 150px;
   outline: none;
-  padding: 4px 0;
+  padding: 5px 0;
   font-family: inherit;
+  display: block;
 }
 
 .send-button, .stop-button {
@@ -708,6 +710,232 @@ header {
 
 .input-footer .app-version {
   opacity: 0.6;
+}
+
+/* === Attach buttons === */
+.attach-btn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+  align-self: flex-end;
+}
+
+.attach-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+/* === Attachment previews === */
+.attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 4px 10px;
+}
+
+.attachment-chip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  max-width: 220px;
+}
+
+.attachment-chip.image { padding: 0; overflow: hidden; }
+
+.attachment-chip.image img {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  display: block;
+}
+
+.attachment-chip .file-icon {
+  color: var(--accent);
+  flex-shrink: 0;
+  display: flex;
+}
+
+.attachment-chip .file-meta { min-width: 0; }
+
+.attachment-chip .file-name {
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.attachment-chip .file-size {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.attachment-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #000;
+  border: 1px solid var(--border);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.attachment-remove:hover { background: var(--danger); border-color: var(--danger); }
+
+/* Attachments shown inside a sent message bubble */
+.message-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.message-attachments img {
+  max-width: 220px;
+  max-height: 220px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+.message-file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.message-file-chip svg { color: var(--accent); flex-shrink: 0; }
+
+/* === Chat history panel === */
+#history-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 300px;
+  max-width: 82vw;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(0);
+  transition: transform 0.2s ease;
+}
+
+#history-panel.hidden {
+  transform: translateX(100%);
+  pointer-events: none;
+}
+
+.history-content {
+  padding: 12px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.btn-new-chat {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 12px;
+  transition: background 0.15s;
+}
+
+.btn-new-chat:hover { background: var(--bg-hover); }
+
+.history-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.history-item:hover { background: var(--bg-hover); }
+.history-item.active { background: var(--bg-hover); }
+
+.history-item-main { flex: 1; min-width: 0; }
+
+.history-item-title {
+  font-size: 0.88rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-item-time {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.history-delete {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+
+.history-item:hover .history-delete { opacity: 1; }
+.history-delete:hover { color: var(--danger); background: rgba(239,68,68,0.1); }
+
+.history-empty {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 24px 12px;
 }
 
 .hidden { display: none !important; }
