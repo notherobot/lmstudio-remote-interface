@@ -866,6 +866,21 @@ header {
   pointer-events: none;
 }
 
+/* On wide screens the panel pushes the content over (like Claude) instead of
+   overlaying it with a scrim. On narrow screens it slides over with the overlay. */
+#app {
+  transition: padding-left 0.2s ease;
+}
+
+@media (min-width: 768px) {
+  #app.history-open {
+    padding-left: 300px;
+  }
+  #app.history-open #history-overlay {
+    display: none !important;
+  }
+}
+
 .history-content {
   padding: 12px;
   overflow-y: auto;

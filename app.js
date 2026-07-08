@@ -1,5 +1,5 @@
 // === Version ===
-const APP_VERSION = 'v0.0.9';
+const APP_VERSION = 'v0.1.0';
 
 // === State ===
 const state = {
@@ -17,6 +17,7 @@ const state = {
 
 // === DOM ===
 const $ = (sel) => document.querySelector(sel);
+const appEl          = $('#app');
 const setup          = $('#setup');
 const setupUrl       = $('#setup-url');
 const setupConnect   = $('#setup-connect');
@@ -227,6 +228,7 @@ function showSetup() {
   state.currentSessionId = null;
   state.modelCaps.vision = false;
   clearAttachments();
+  closeHistory();
   attachImageBtn.classList.add('hidden');
   localStorage.removeItem('lmstudio-server-url');
   setStatus('disconnected');
@@ -852,12 +854,19 @@ function renderHistoryList() {
 function openHistory() {
   renderHistoryList();
   historyPanel.classList.remove('hidden');
-  historyOverlay.classList.remove('hidden');
+  historyOverlay.classList.remove('hidden'); // hidden on wide screens via CSS
+  appEl.classList.add('history-open');        // pushes content over on desktop
 }
 
 function closeHistory() {
   historyPanel.classList.add('hidden');
   historyOverlay.classList.add('hidden');
+  appEl.classList.remove('history-open');
+}
+
+function toggleHistory() {
+  if (historyPanel.classList.contains('hidden')) openHistory();
+  else closeHistory();
 }
 
 // === Sidebar ===
@@ -1079,7 +1088,7 @@ function setupListeners() {
   });
 
   // History panel
-  historyBtn.addEventListener('click', openHistory);
+  historyBtn.addEventListener('click', toggleHistory);
   historyClose.addEventListener('click', closeHistory);
   historyOverlay.addEventListener('click', closeHistory);
   historyNew.addEventListener('click', () => { newChat(); closeHistory(); });
