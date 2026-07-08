@@ -650,14 +650,16 @@ header {
   border: none;
   color: var(--text-primary);
   font-size: 16px;
-  line-height: 1.5;
+  line-height: 24px;
   resize: none;
-  min-height: 26px;
+  min-height: 24px;   /* one line of content; padding is added by the wrapper */
   max-height: 150px;
   outline: none;
-  padding: 5px 0;
+  padding: 0;
+  margin: 0;
   font-family: inherit;
   display: block;
+  vertical-align: middle;
 }
 
 .send-button, .stop-button {
@@ -712,24 +714,35 @@ header {
   opacity: 0.6;
 }
 
-/* === Attach buttons === */
-.attach-btn {
-  width: 32px;
-  height: 32px;
+/* === Composer (attach icons + input) === */
+.composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.composer .input-wrapper { flex: 1; }
+
+/* Bare attach icon — no button chrome, sits to the left of the field */
+.attach-icon {
+  background: none;
   border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-secondary);
+  padding: 0;
+  margin: 0;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  color: var(--text-muted);
   cursor: pointer;
-  flex-shrink: 0;
-  transition: background 0.15s, color 0.15s;
-  align-self: flex-end;
+  -webkit-appearance: none;
+  transition: color 0.15s;
 }
 
-.attach-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+.attach-icon:hover { color: var(--text-primary); }
+.attach-icon:active { color: var(--accent); }
 
 /* === Attachment previews === */
 .attachments {
