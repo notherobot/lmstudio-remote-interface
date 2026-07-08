@@ -470,6 +470,56 @@ header {
   font-size: 0.9rem;
 }
 
+/* Thinking / reasoning dropdown */
+.think-block {
+  margin: 0 0 0.75em;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(255,255,255,0.02);
+}
+
+.think-block summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+}
+
+.think-block summary::-webkit-details-marker { display: none; }
+
+.think-block summary::before {
+  content: '';
+  width: 0;
+  height: 0;
+  border-left: 5px solid currentColor;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+
+.think-block[open] summary::before { transform: rotate(90deg); }
+
+.think-block summary:hover { color: var(--text-secondary); }
+
+.think-content {
+  padding: 0 12px 10px 23px;
+  font-size: 0.9em;
+  color: var(--text-secondary);
+  border-top: 1px solid rgba(255,255,255,0.04);
+  padding-top: 10px;
+  margin-top: 2px;
+}
+
+.think-content p:first-child { margin-top: 0; }
+.think-content p:last-child { margin-bottom: 0; }
+
 /* Markdown */
 .message-content p { margin: 0.5em 0; }
 .message-content p:first-child { margin-top: 0; }

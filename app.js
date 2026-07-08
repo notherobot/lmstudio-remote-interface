@@ -1,5 +1,5 @@
 // === Version ===
-const APP_VERSION = 'v0.0.1';
+const APP_VERSION = 'v0.0.2';
 
 // === State ===
 const state = {
@@ -236,7 +236,7 @@ function addMessage(role, content, isError) {
   bubble.className = 'message-content' + (isError ? ' error' : '');
 
   if (role === 'assistant' && !isError) {
-    bubble.innerHTML = renderMarkdown(content);
+    bubble.innerHTML = renderMessage(content);
   } else {
     bubble.textContent = content;
   }
@@ -273,6 +273,43 @@ function renderMarkdown(text) {
     return marked.parse(text, { breaks: true });
   }
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+}
+
+// Wrap reasoning ("thinking") in a collapsed <details> dropdown, leaving the
+// answer rendered normally. Handles <think>/<thinking> tags, including a
+// still-open block mid-stream.
+function renderMessage(text) {
+  const THINK_RE = /<think(?:ing)?>([\s\S]*?)<\/think(?:ing)?>/gi;
+  let html = '';
+  let lastIndex = 0;
+  let m;
+  while ((m = THINK_RE.exec(text)) !== null) {
+    const before = text.slice(lastIndex, m.index);
+    if (before.trim()) html += renderMarkdown(before);
+    html += thinkBlock(m[1], false);
+    lastIndex = THINK_RE.lastIndex;
+  }
+
+  const rest = text.slice(lastIndex);
+  const openIdx = rest.search(/<think(?:ing)?>/i);
+  if (openIdx !== -1) {
+    // An unclosed reasoning block — everything after it is still-streaming thought
+    const before = rest.slice(0, openIdx);
+    if (before.trim()) html += renderMarkdown(before);
+    const inner = rest.slice(openIdx).replace(/^<think(?:ing)?>/i, '');
+    html += thinkBlock(inner, true);
+  } else if (rest.trim()) {
+    html += renderMarkdown(rest);
+  }
+
+  return html || renderMarkdown(text);
+}
+
+function thinkBlock(inner, streaming) {
+  const trimmed = inner.trim();
+  const body = trimmed ? renderMarkdown(trimmed) : '<em>Thinking…</em>';
+  const label = streaming ? 'Thinking…' : 'Thought process';
+  return `<details class="think-block"><summary>${label}</summary><div class="think-content">${body}</div></details>`;
 }
 
 function addCopyButtons(el) {
@@ -334,6 +371,13 @@ async function sendMessage() {
   scrollToBottom();
 
   let fullContent = '';
+  let reasoning = '';
+
+  // Combine separate reasoning (LM Studio's reasoning_content) with the answer
+  // so renderMessage can wrap it as a collapsible block. Inline <think> tags
+  // already live inside fullContent and are handled there.
+  const withReasoning = () =>
+    reasoning ? `<think>${reasoning}</think>${fullContent}` : fullContent;
 
   try {
     const resp = await fetch(state.apiBase + '/v1/chat/completions', {
@@ -375,10 +419,12 @@ async function sendMessage() {
 
           try {
             const chunk = JSON.parse(data);
-            const delta = chunk.choices?.[0]?.delta?.content;
-            if (delta) {
-              fullContent += delta;
-              bubble.innerHTML = renderMarkdown(fullContent);
+            const delta = chunk.choices?.[0]?.delta || {};
+            let changed = false;
+            if (delta.reasoning_content) { reasoning += delta.reasoning_content; changed = true; }
+            if (delta.content) { fullContent += delta.content; changed = true; }
+            if (changed) {
+              bubble.innerHTML = renderMessage(withReasoning());
               addCopyButtons(bubble);
               scrollToBottom();
             }
@@ -387,8 +433,10 @@ async function sendMessage() {
       }
     } else {
       const data = await resp.json();
-      fullContent = data.choices?.[0]?.message?.content || '(empty response)';
-      bubble.innerHTML = renderMarkdown(fullContent);
+      const msg = data.choices?.[0]?.message || {};
+      reasoning = msg.reasoning_content || '';
+      fullContent = msg.content || '(empty response)';
+      bubble.innerHTML = renderMessage(withReasoning());
       addCopyButtons(bubble);
       scrollToBottom();
     }
