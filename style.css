@@ -351,13 +351,6 @@ header {
   height: 15px;
 }
 
-.setting-hint {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  margin-top: 6px;
-  line-height: 1.4;
-}
-
 /* === Chat === */
 #chat-container {
   flex: 1;
