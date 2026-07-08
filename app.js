@@ -1,5 +1,5 @@
 // === Version ===
-const APP_VERSION = 'v0.0.7';
+const APP_VERSION = 'v0.0.8';
 
 // === State ===
 const state = {
@@ -421,7 +421,7 @@ function renderMarkdown(text) {
 // Wrap reasoning ("thinking") in a collapsed <details> dropdown, leaving the
 // answer rendered normally. Handles <think>/<thinking> tags (including a
 // still-open block mid-stream) and un-tagged "thinking out loud" output.
-function renderMessage(text) {
+function renderMessage(text, streaming) {
   if (collapseToggle && !collapseToggle.checked) return renderMarkdown(text);
 
   // Tag-delimited reasoning (<think>…</think>)
@@ -450,9 +450,9 @@ function renderMessage(text) {
   }
 
   // Un-tagged reasoning: models that "think out loud" in plain text
-  const ff = detectFreeformReasoning(text);
+  const ff = detectFreeformReasoning(text, streaming);
   if (ff) {
-    let html = thinkBlock(ff.reasoning, false);
+    let html = thinkBlock(ff.reasoning, !!ff.streaming);
     if (ff.answer.trim()) html += renderMarkdown(ff.answer.trim());
     return html;
   }
@@ -461,36 +461,65 @@ function renderMessage(text) {
 }
 
 // Some models emit their chain-of-thought as plain prose (no tags), typically
-// opening with a recognizable preamble and closing with a final-answer heading.
-// Detect that shape and split reasoning from the answer.
+// opening with a recognizable preamble and then producing the real answer.
+// Detect that shape and split the reasoning from the answer.
 const REASON_PREAMBLE = /^(?:\s*(?:>|#{1,4})?\s*)?(?:okay[,]?\s+)?(here'?s\s+(?:a|my)\s+(?:thinking|thought|reasoning)(?:\s+process)?|(?:my\s+)?(?:thinking|thought)\s+process\b|reasoning\s*:|let'?s\s+think\b|let\s+me\s+think\b)/i;
-const ANSWER_MARKER = /^\s{0,3}(?:[-*]|\d+[.)])?\s*(?:#{1,4}\s*)?(?:\*\*)?\s*(?:final\s+response|final\s+answer|draft\s+response|my\s+(?:response|answer)|response|answer|output|reply)\b\s*[:.\-–—)]*\s*(.*)$/i;
+// Explicit final-answer heading/label. Strong phrases stand alone; weaker words
+// (response/answer/…) must be a "Label:" to avoid matching reasoning prose.
+const ANSWER_MARKER = /^\s{0,3}(?:[-*]|\d+[.)])?\s*(?:#{1,4}\s*)?(?:\*\*)?\s*(?:final\s+response|final\s+answer|draft\s+response|my\s+(?:response|answer)|here'?s\s+(?:my\s+)?(?:response|answer)|(?:response|answer|output|reply|solution)\s*:)\b[\s:.\-–—)*]*(.*)$/i;
+const LISTY = /^(?:[-*>]|\d+[.)]|#{1,6}\s|\|)/;
 
-function detectFreeformReasoning(text) {
+function detectFreeformReasoning(text, streaming) {
   if (!REASON_PREAMBLE.test(text)) return null;
 
+  // 1) Split at an explicit final-answer heading (use the last one).
   const lines = text.split('\n');
   let markerLine = -1;
   let inlineAnswer = '';
   for (let i = 0; i < lines.length; i++) {
     const mm = lines[i].match(ANSWER_MARKER);
     if (mm) {
-      markerLine = i; // keep the last marker
+      markerLine = i;
       const trail = (mm[1] || '').trim();
       // Ignore trailing heading fragments like "(Mental Refinement):"
       inlineAnswer = (!trail || /^[([]/.test(trail) || trail.endsWith(':')) ? '' : trail;
     }
   }
-
-  if (markerLine === -1) {
-    // Preamble but no clear answer boundary — collapse the whole thing
-    return { reasoning: text, answer: '' };
+  if (markerLine !== -1) {
+    const reasoning = lines.slice(0, markerLine).join('\n');
+    const after = lines.slice(markerLine + 1).join('\n');
+    const answer = (inlineAnswer ? inlineAnswer + '\n' : '') + after;
+    if (answer.trim()) return { reasoning, answer };
   }
 
-  const reasoning = lines.slice(0, markerLine).join('\n');
-  const after = lines.slice(markerLine + 1).join('\n');
-  const answer = (inlineAnswer ? inlineAnswer + '\n' : '') + after;
-  return { reasoning, answer };
+  // While still streaming, keep the whole thing collapsed as "Thinking…" — the
+  // structural split below only makes sense once the full message has arrived.
+  if (streaming) return { reasoning: text, answer: '', streaming: true };
+
+  // 2) No heading: treat the trailing prose block(s) as the answer. These models
+  //    reason in lists/steps, then write the answer as plain paragraphs at the end.
+  const blocks = text.split(/\n\s*\n/);
+  let end = blocks.length - 1;
+  while (end >= 0 && !blocks[end].trim()) end--;
+  if (end >= 1) {
+    let start = end;
+    // Absorb consecutive trailing prose blocks (not lists/headings/steps).
+    while (start > 0) {
+      const first = (blocks[start].trim().split('\n')[0] || '').trim();
+      if (LISTY.test(first)) break;
+      const prevFirst = (blocks[start - 1].trim().split('\n')[0] || '').trim();
+      if (LISTY.test(prevFirst)) break; // previous block is still reasoning
+      start--;
+    }
+    const answerBlocks = blocks.slice(start).join('\n\n').trim();
+    const firstLine = (answerBlocks.split('\n')[0] || '').trim();
+    if (start >= 1 && answerBlocks.length >= 2 && !LISTY.test(firstLine)) {
+      return { reasoning: blocks.slice(0, start).join('\n\n'), answer: answerBlocks };
+    }
+  }
+
+  // 3) Can't confidently locate the answer — don't collapse (never hide output).
+  return null;
 }
 
 function thinkBlock(inner, streaming) {
@@ -616,13 +645,19 @@ async function sendMessage() {
             if (delta.reasoning_content) { reasoning += delta.reasoning_content; changed = true; }
             if (delta.content) { fullContent += delta.content; changed = true; }
             if (changed) {
-              bubble.innerHTML = renderMessage(withReasoning());
+              bubble.innerHTML = renderMessage(withReasoning(), true);
               addCopyButtons(bubble);
               scrollToBottom();
             }
           } catch(e) { /* skip */ }
         }
       }
+
+      // Final render (streaming=false) so un-tagged reasoning gets split from
+      // the answer now that the whole message has arrived.
+      bubble.innerHTML = renderMessage(withReasoning(), false);
+      addCopyButtons(bubble);
+      scrollToBottom();
     } else {
       const data = await resp.json();
       const msg = data.choices?.[0]?.message || {};
