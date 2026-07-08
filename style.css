@@ -382,6 +382,33 @@ header {
   font-size: 1.1rem;
 }
 
+/* === Model switch divider === */
+.model-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  margin: 4px 0;
+  animation: fadeIn 0.2s ease;
+}
+
+.model-divider::before,
+.model-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.model-divider span {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 /* === Messages === */
 .message {
   display: flex;
