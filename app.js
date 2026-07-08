@@ -1,3 +1,6 @@
+// === Version ===
+const APP_VERSION = 'v0.0.1';
+
 // === State ===
 const state = {
   apiBase: '',
@@ -45,6 +48,7 @@ const stopBtn        = $('#stop-btn');
 
 // === Init ===
 function init() {
+  document.querySelectorAll('.app-version').forEach(el => el.textContent = APP_VERSION);
   loadSettings();
   setupListeners();
   autoGrow();

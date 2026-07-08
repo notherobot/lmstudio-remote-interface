@@ -645,6 +645,21 @@ header {
   margin-top: 8px;
 }
 
+/* === Version label === */
+.app-version {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  opacity: 0.7;
+}
+
+.setup-card .app-version {
+  margin-top: 24px;
+}
+
+.input-footer .app-version {
+  opacity: 0.6;
+}
+
 .hidden { display: none !important; }
 
 /* === Scrollbar === */
