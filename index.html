@@ -93,8 +93,8 @@
     <!-- Header -->
     <header id="header" class="hidden">
       <div class="header-left">
-        <button id="sidebar-toggle" class="icon-btn" aria-label="Settings">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        <button id="history-btn" class="icon-btn" aria-label="Chat history" title="Chat history">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>
         </button>
         <div id="status-indicator" class="status disconnected"></div>
         <select id="model-select" class="model-dropdown" disabled>
@@ -102,11 +102,11 @@
         </select>
       </div>
       <div class="header-right">
-        <button id="history-btn" class="icon-btn" aria-label="Chat history" title="Chat history">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg>
-        </button>
         <button id="new-chat-btn" class="icon-btn" aria-label="New chat" title="New chat">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+        </button>
+        <button id="sidebar-toggle" class="icon-btn" aria-label="Settings">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         </button>
       </div>
     </header>

@@ -242,12 +242,12 @@ header {
 #sidebar {
   position: fixed;
   top: 0;
-  left: 0;
+  right: 0;
   bottom: 0;
   width: 280px;
   max-width: 80vw;
   background: var(--bg-secondary);
-  border-right: 1px solid var(--border);
+  border-left: 1px solid var(--border);
   z-index: 50;
   display: flex;
   flex-direction: column;
@@ -256,7 +256,7 @@ header {
 }
 
 #sidebar.hidden {
-  transform: translateX(-100%);
+  transform: translateX(100%);
   pointer-events: none;
 }
 
@@ -848,12 +848,12 @@ header {
 #history-panel {
   position: fixed;
   top: 0;
-  right: 0;
+  left: 0;
   bottom: 0;
   width: 300px;
   max-width: 82vw;
   background: var(--bg-secondary);
-  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
   z-index: 50;
   display: flex;
   flex-direction: column;
@@ -862,7 +862,7 @@ header {
 }
 
 #history-panel.hidden {
-  transform: translateX(100%);
+  transform: translateX(-100%);
   pointer-events: none;
 }
 
