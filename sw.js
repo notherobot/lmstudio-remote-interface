@@ -1,5 +1,5 @@
 // Bump this on every release so old caches are purged (keep in sync with APP_VERSION in app.js)
-const CACHE_NAME = 'lmstudio-remote-v0.3.7';
+const CACHE_NAME = 'lmstudio-remote-v0.3.8';
 const ASSETS = [
   './',
   './index.html',
@@ -9,6 +9,7 @@ const ASSETS = [
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
+  './fonts/Matoran.ttf',
 ];
 
 // Install — cache shell assets
