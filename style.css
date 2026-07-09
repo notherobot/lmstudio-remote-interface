@@ -374,7 +374,7 @@ header {
 #messages {
   max-width: var(--max-width);
   margin: 0 auto;
-  padding: 16px 16px 8px;
+  padding: 16px 16px 120px;
   display: flex;
   flex-direction: column;
   min-height: 100%;
@@ -698,11 +698,16 @@ pre:has(.preview-btn) .copy-btn { right: 72px; }
 
 /* === Input Area === */
 #input-area {
+  position: fixed;
+  bottom: var(--safe-bottom);
+  left: 0;
+  right: 0;
   padding: 0 16px 12px;
-  flex-shrink: 0;
   max-width: var(--max-width);
   margin: 0 auto;
   width: 100%;
+  background: var(--bg-primary);
+  z-index: 40;
 }
 
 .input-wrapper {
