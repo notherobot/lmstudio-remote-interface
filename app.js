@@ -1,7 +1,7 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.3.1';
+const APP_VERSION = 'v0.3.2';
 const APP_VERSION_DATE = '2026-07-09';
 
 // === State ===
@@ -547,10 +547,17 @@ function renderMessage(text, streaming) {
       html += thinkBlock(reasoning, false);
       if (answer.trim()) html += renderMarkdown(answer.trim());
     } else {
-      // No final channel marker (yet). While streaming that's normal; when the
-      // message is complete it means the answer never arrived (e.g. token
-      // limit hit mid-thought) — keep it collapsed but accessible.
-      html += thinkBlock(stripSpecialTokens(afterThink), !!streaming);
+      // No final channel marker (yet). While streaming that's normal; once
+      // complete, try to find the answer inside; if there is none (e.g. token
+      // limit hit mid-thought), keep it collapsed but accessible.
+      const inner = stripSpecialTokens(afterThink);
+      const split = !streaming ? findAnswerBoundary(inner) : null;
+      if (split && split.answer.trim()) {
+        html += thinkBlock(split.reasoning, false);
+        html += renderMarkdown(split.answer.trim());
+      } else {
+        html += thinkBlock(inner, !!streaming);
+      }
     }
     return html || renderMarkdown(stripSpecialTokens(text));
   }
@@ -558,38 +565,45 @@ function renderMessage(text, streaming) {
   // Tag-delimited reasoning (<think>…</think>)
   if (/<think(?:ing)?>/i.test(text)) {
     const THINK_RE = /<think(?:ing)?>([\s\S]*?)<\/think(?:ing)?>/gi;
-    let html = '';
+    const parts = []; // { type: 'md'|'think', text, open? }
     let lastIndex = 0;
     let m;
     while ((m = THINK_RE.exec(text)) !== null) {
       const before = text.slice(lastIndex, m.index);
-      if (before.trim()) html += renderMarkdown(before);
-      html += thinkBlock(m[1], false);
+      if (before.trim()) parts.push({ type: 'md', text: before });
+      parts.push({ type: 'think', text: m[1] });
       lastIndex = THINK_RE.lastIndex;
     }
     const rest = text.slice(lastIndex);
     const openIdx = rest.search(/<think(?:ing)?>/i);
     if (openIdx !== -1) {
       const before = rest.slice(0, openIdx);
-      if (before.trim()) html += renderMarkdown(before);
-      const inner = rest.slice(openIdx).replace(/^<think(?:ing)?>/i, '');
-      if (streaming) {
-        html += thinkBlock(inner, true);
-      } else {
-        // The block never closed but the message is complete — some models
-        // (and some LM Studio templates) open <think> and never emit the
-        // closing tag, gluing the answer onto the end of the reasoning.
-        // Find the boundary so the answer isn't trapped in the dropdown.
-        const split = findAnswerBoundary(inner);
-        if (split) {
-          html += thinkBlock(split.reasoning, false);
-          html += renderMarkdown(split.answer.trim());
-        } else {
-          html += thinkBlock(inner, false);
+      if (before.trim()) parts.push({ type: 'md', text: before });
+      parts.push({ type: 'think', text: rest.slice(openIdx).replace(/^<think(?:ing)?>/i, ''), open: true });
+    } else if (rest.trim()) {
+      parts.push({ type: 'md', text: rest });
+    }
+
+    // If the completed message is nothing but think content — either the tag
+    // never closed, or the reasoning parser swallowed the answer too (the
+    // telltale: answer glued on with no space after the last thought) — find
+    // the boundary inside the last block so the answer isn't trapped.
+    if (!streaming) {
+      const last = parts[parts.length - 1];
+      const hasAnswerOutside = parts.some(p => p.type === 'md');
+      if (last && last.type === 'think' && !hasAnswerOutside) {
+        const split = findAnswerBoundary(last.text);
+        if (split && split.answer.trim()) {
+          last.text = split.reasoning;
+          parts.push({ type: 'md', text: split.answer });
         }
       }
-    } else if (rest.trim()) {
-      html += renderMarkdown(rest);
+    }
+
+    let html = '';
+    for (const p of parts) {
+      if (p.type === 'md') html += renderMarkdown(p.text.trim());
+      else html += thinkBlock(p.text, !!p.open && !!streaming);
     }
     return html || renderMarkdown(text);
   }
@@ -651,6 +665,22 @@ function findAnswerBoundary(text) {
     const after = lines.slice(headingIdx + 1).join('\n');
     const answer = (inlineAnswer ? inlineAnswer + '\n' : '') + after;
     if (answer.trim()) return { reasoning, answer };
+  }
+
+  // C) Glued seam: a sentence end jammed directly against a capitalized word
+  // with no space ("…irrational number.The square root…"). That's the
+  // telltale of a template/parser concatenating the reasoning and the answer
+  // as separate generations. Split at the last such seam outside code fences.
+  const GLUE_RE = /[a-z]{2,}[.!?](?=[A-Z][a-z])/g;
+  let glueEnd = -1;
+  let g;
+  while ((g = GLUE_RE.exec(text)) !== null) {
+    const fences = (text.slice(0, g.index).match(/```/g) || []).length;
+    if (fences % 2 === 0) glueEnd = g.index + g[0].length; // ignore seams inside code
+  }
+  if (glueEnd > 0) {
+    const answer = text.slice(glueEnd);
+    if (answer.trim().length >= 8) return { reasoning: text.slice(0, glueEnd), answer };
   }
 
   // Narrow, safe structural rule: a single plain-prose block that directly
@@ -972,7 +1002,10 @@ async function generateReply() {
       finishReason = data.choices?.[0]?.finish_reason || null;
       const msg = data.choices?.[0]?.message || {};
       reasoning = msg.reasoning_content || '';
-      fullContent = msg.content || '(empty response)';
+      // Only substitute the placeholder when there's truly nothing — if
+      // reasoning exists, keep content empty so the boundary finder can
+      // extract an answer that the parser swallowed into reasoning.
+      fullContent = msg.content || (reasoning ? '' : '(empty response)');
       state.lastLoadedModel = targetModel;
       bubble.innerHTML = renderMessage(withReasoning());
       addCopyButtons(bubble);
