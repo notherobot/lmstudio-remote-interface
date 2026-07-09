@@ -1,7 +1,7 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.3.4';
+const APP_VERSION = 'v0.3.5';
 const APP_VERSION_DATE = '2026-07-09';
 
 // === State ===
@@ -1728,19 +1728,23 @@ function setupListeners() {
     if (!document.hidden && state.apiBase && !state.connected && !state.streaming) connect();
   });
 
-  // Keep the composer pinned above the on-screen keyboard. Mobile browsers
-  // don't reliably keep `position: fixed` elements above the keyboard (the
-  // fixed footer can end up anchored behind it), so measure the actual
-  // visible viewport and push the footer up by the keyboard's height.
+  // Tie #app's actual height to the real visible viewport instead of a CSS
+  // viewport unit. `dvh` only reacts to browser chrome (address bar)
+  // show/hide, not the on-screen keyboard, so without this the layout stays
+  // full-height while the keyboard covers part of it — which is exactly
+  // when mobile browsers kick in their own "scroll the focused input into
+  // view" behavior and yank the whole page up. Once #app's height matches
+  // window.visualViewport.height, the flex layout already fits the visible
+  // area (composer right above the keyboard, chat area shrunk to match),
+  // so there's nothing left for the browser to scroll.
   if (window.visualViewport) {
     const vv = window.visualViewport;
-    const syncKeyboardOffset = () => {
-      const offset = window.innerHeight - vv.height - vv.offsetTop;
-      document.documentElement.style.setProperty('--kb-offset', Math.max(0, Math.round(offset)) + 'px');
+    const syncAppHeight = () => {
+      document.documentElement.style.setProperty('--app-height', vv.height + 'px');
     };
-    vv.addEventListener('resize', syncKeyboardOffset);
-    vv.addEventListener('scroll', syncKeyboardOffset);
-    syncKeyboardOffset();
+    vv.addEventListener('resize', syncAppHeight);
+    vv.addEventListener('scroll', syncAppHeight);
+    syncAppHeight();
   }
 }
 
