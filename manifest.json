@@ -4,8 +4,8 @@
   "description": "Chat interface for LM Studio",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#171717",
-  "theme_color": "#171717",
+  "background_color": "#0a1012",
+  "theme_color": "#0a1012",
   "orientation": "any",
   "icons": [
     {

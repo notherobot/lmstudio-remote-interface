@@ -1,8 +1,8 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.2.3';
-const APP_VERSION_DATE = '2026-07-08';
+const APP_VERSION = 'v0.3.0';
+const APP_VERSION_DATE = '2026-07-09';
 
 // === State ===
 const state = {
@@ -290,6 +290,9 @@ function addMessage(role, content, isError) {
   wrap.appendChild(body);
   messagesEl.appendChild(wrap);
   addCopyButtons(bubble);
+  if (role === 'assistant' && !isError) {
+    addMessageActions(body, () => (typeof content === 'string' ? content : extractText(content)));
+  }
   scrollToBottom();
   return bubble;
 }
@@ -519,8 +522,38 @@ function renderMarkdown(text) {
 // Wrap reasoning ("thinking") in a collapsed <details> dropdown, leaving the
 // answer rendered normally. Handles <think>/<thinking> tags (including a
 // still-open block mid-stream) and un-tagged "thinking out loud" output.
+// Channel-token reasoning: some chat templates (gpt-oss/Harmony-style) leak
+// special tokens like "<|channel|>thought … <|channel|>final …" into the text.
+// Pipes are sometimes half-eaten by rendering, so match loosely (<|channel> too).
+const CHANNEL_THINK_RE = /<\|?channel\|?>\s*(?:thought|thinking|analysis)[^\S\n]*(?:<\|?message\|?>)?/i;
+const CHANNEL_FINAL_RE = /(?:<\|?start\|?>\s*(?:assistant)?\s*)?<\|?channel\|?>\s*(?:final|response|answer)[^\S\n]*(?:<\|?message\|?>)?/i;
+const SPECIAL_TOKEN_RE = /<\|?(?:channel|message|start|end|return|im_start|im_end|endoftext|eot_id|assistant|system|developer)\|?>/gi;
+const stripSpecialTokens = (s) => s.replace(SPECIAL_TOKEN_RE, '');
+
 function renderMessage(text, streaming) {
   if (collapseToggle && !collapseToggle.checked) return renderMarkdown(text);
+
+  // Channel-token reasoning (checked first — these also often contain lists
+  // that would confuse the freeform detector)
+  const chThink = text.match(CHANNEL_THINK_RE);
+  if (chThink) {
+    const pre = text.slice(0, chThink.index);
+    const afterThink = text.slice(chThink.index + chThink[0].length);
+    const chFinal = afterThink.match(CHANNEL_FINAL_RE);
+    let html = pre.trim() ? renderMarkdown(stripSpecialTokens(pre)) : '';
+    if (chFinal) {
+      const reasoning = stripSpecialTokens(afterThink.slice(0, chFinal.index));
+      const answer = stripSpecialTokens(afterThink.slice(chFinal.index + chFinal[0].length));
+      html += thinkBlock(reasoning, false);
+      if (answer.trim()) html += renderMarkdown(answer.trim());
+    } else {
+      // No final channel marker (yet). While streaming that's normal; when the
+      // message is complete it means the answer never arrived (e.g. token
+      // limit hit mid-thought) — keep it collapsed but accessible.
+      html += thinkBlock(stripSpecialTokens(afterThink), !!streaming);
+    }
+    return html || renderMarkdown(stripSpecialTokens(text));
+  }
 
   // Tag-delimited reasoning (<think>…</think>)
   if (/<think(?:ing)?>/i.test(text)) {
@@ -633,8 +666,77 @@ function thinkBlock(inner, streaming) {
   return `<details class="think-block"><summary>${label}</summary><div class="think-content">${body}</div></details>`;
 }
 
+// === Syntax highlighting (dependency-free) ===
+const HL_KEYWORDS = {
+  js: 'const let var function return if else for while do switch case break continue new class extends super this typeof instanceof in of try catch finally throw async await yield import export from default null undefined true false void delete static get set',
+  py: 'def return if elif else for while in not and or is None True False class import from as with try except finally raise lambda pass break continue global nonlocal yield async await assert del print self',
+  css: '',
+  html: '',
+  json: 'true false null',
+  sh: 'if then else elif fi for while do done case esac function echo exit return local export set read cd source',
+  sql: 'select from where insert into values update set delete create table drop alter join left right inner outer on as order by group having limit offset and or not null primary key',
+};
+const HL_ALIASES = { javascript: 'js', typescript: 'js', jsx: 'js', tsx: 'js', ts: 'js', node: 'js', python: 'py', bash: 'sh', shell: 'sh', zsh: 'sh', xml: 'html', htm: 'html' };
+
+function microHighlight(code, lang) {
+  lang = HL_ALIASES[lang] || lang;
+  const kw = new Set((HL_KEYWORDS[lang] || HL_KEYWORDS.js).split(' '));
+  let out = '';
+  // comments | strings | numbers | words — tokenize the raw code, escape as we emit
+  const re = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/|#[^\n]*|<!--[\s\S]*?-->)|("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`)|(\b\d+(?:\.\d+)?\b)|([A-Za-z_$][\w$]*)|([\s\S])/g;
+  let m;
+  while ((m = re.exec(code)) !== null) {
+    if (m[1] !== undefined) {
+      // '#' comments only apply to shell/python-ish; leave as plain elsewhere
+      const isHash = m[1][0] === '#';
+      const hashOk = lang === 'py' || lang === 'sh' || lang === 'yaml';
+      out += (isHash && !hashOk) ? escapeHtml(m[1]) : `<span class="hl-com">${escapeHtml(m[1])}</span>`;
+    } else if (m[2] !== undefined) out += `<span class="hl-str">${escapeHtml(m[2])}</span>`;
+    else if (m[3] !== undefined) out += `<span class="hl-num">${escapeHtml(m[3])}</span>`;
+    else if (m[4] !== undefined) out += kw.has(m[4]) ? `<span class="hl-kw">${escapeHtml(m[4])}</span>` : escapeHtml(m[4]);
+    else out += escapeHtml(m[5]);
+  }
+  // html: tint tags after the fact (tokens above already escaped)
+  if (lang === 'html') {
+    out = out.replace(/(&lt;\/?)([a-zA-Z][\w-]*)/g, '$1<span class="hl-kw">$2</span>');
+  }
+  return out;
+}
+
+function codeLang(codeEl) {
+  const cls = codeEl.className || '';
+  const m = cls.match(/language-([\w-]+)/);
+  if (m) return m[1].toLowerCase();
+  const t = codeEl.textContent.trimStart();
+  if (/^<!doctype|^<html|^</i.test(t)) return 'html';
+  return '';
+}
+
+const looksLikeHtmlDoc = (t) => /^\s*(<!doctype html|<html)/i.test(t) || (/<\w+[^>]*>/.test(t) && /<\/(div|body|button|p|span|h\d|style|script)>/i.test(t));
+
 function addCopyButtons(el) {
   el.querySelectorAll('pre').forEach(pre => {
+    const code = pre.querySelector('code');
+
+    // Syntax highlighting (re-applied per streaming render; cheap at this scale)
+    if (code && !code.dataset.hl) {
+      const lang = codeLang(code);
+      code.innerHTML = microHighlight(code.textContent, lang || 'js');
+      code.dataset.hl = '1';
+    }
+
+    // HTML preview button (artifacts-lite)
+    if (code && !pre.querySelector('.preview-btn')) {
+      const lang = codeLang(code);
+      if (lang === 'html' || looksLikeHtmlDoc(code.textContent)) {
+        const pv = document.createElement('button');
+        pv.className = 'preview-btn';
+        pv.textContent = 'Preview';
+        pv.addEventListener('click', () => openPreview(code.textContent));
+        pre.appendChild(pv);
+      }
+    }
+
     if (pre.querySelector('.copy-btn')) return;
     const btn = document.createElement('button');
     btn.className = 'copy-btn';
@@ -679,6 +781,14 @@ async function sendMessage() {
   const attachments = state.attachments;
   if ((!text && attachments.length === 0) || !state.connected || state.streaming) return;
 
+  // Large combined attachments make prompt processing take minutes on local
+  // models — warn before sending so a "hang" isn't a surprise.
+  const inlinedBytes = attachments.filter(a => a.kind === 'file').reduce((n, a) => n + (a.text?.length || 0), 0);
+  if (inlinedBytes > 60000) {
+    const kb = Math.round(inlinedBytes / 1024);
+    if (!confirm(`You're sending ~${kb} KB of file text. Local models can take a long time to process large prompts — continue?`)) return;
+  }
+
   const content = buildApiContent(text, attachments);
   state.messages.push({ role: 'user', content });
   addUserMessage(text, attachments);
@@ -688,6 +798,24 @@ async function sendMessage() {
   updateSendBtn();
   saveCurrentSession();
 
+  await generateReply();
+}
+
+// Removes the last assistant reply and asks the model again with the same
+// conversation. Wired to the Regenerate button on the newest AI message.
+function regenerate() {
+  if (state.streaming || !state.connected) return;
+  if (state.messages[state.messages.length - 1]?.role === 'assistant') {
+    state.messages.pop();
+  }
+  const wraps = messagesEl.querySelectorAll('.message.assistant');
+  if (wraps.length) wraps[wraps.length - 1].remove();
+  saveCurrentSession();
+  generateReply();
+}
+
+// Generate an assistant reply for the current state.messages.
+async function generateReply() {
   // Model selection is purely whatever's in the dropdown — no auto-switching.
   // Show the loading bar whenever that model isn't the one that last actually
   // produced output, since LM Studio may need to load it fresh.
@@ -734,6 +862,15 @@ async function sendMessage() {
   let firstTokenAt = 0;
   let deltaCount = 0;
   let usage = null;
+  let finishReason = null;
+
+  // If nothing arrives for a while, say so — big prompts (multiple attached
+  // files) can take minutes of prompt processing and look like a hang.
+  const slowNote = document.createElement('div');
+  slowNote.className = 'slow-note';
+  slowNote.textContent = 'Still working — large prompts can take a while to process…';
+  const slowTimer = setTimeout(() => { if (!firstTokenAt) body.appendChild(slowNote); }, 10000);
+  const clearSlow = () => { clearTimeout(slowTimer); slowNote.remove(); };
 
   // Combine separate reasoning (LM Studio's reasoning_content) with the answer
   // so renderMessage can wrap it as a collapsible block. Inline <think> tags
@@ -782,12 +919,13 @@ async function sendMessage() {
           try {
             const chunk = JSON.parse(data);
             if (chunk.usage) usage = chunk.usage;
+            if (chunk.choices?.[0]?.finish_reason) finishReason = chunk.choices[0].finish_reason;
             const delta = chunk.choices?.[0]?.delta || {};
             let changed = false;
             if (delta.reasoning_content) { reasoning += delta.reasoning_content; changed = true; }
             if (delta.content) { fullContent += delta.content; changed = true; }
             if (changed) {
-              if (!firstTokenAt) { firstTokenAt = performance.now(); state.lastLoadedModel = targetModel; }
+              if (!firstTokenAt) { firstTokenAt = performance.now(); state.lastLoadedModel = targetModel; clearSlow(); }
               deltaCount++;
               bubble.innerHTML = renderMessage(withReasoning(), true);
               addCopyButtons(bubble);
@@ -805,6 +943,7 @@ async function sendMessage() {
     } else {
       const data = await resp.json();
       usage = data.usage || null;
+      finishReason = data.choices?.[0]?.finish_reason || null;
       const msg = data.choices?.[0]?.message || {};
       reasoning = msg.reasoning_content || '';
       fullContent = msg.content || '(empty response)';
@@ -814,14 +953,23 @@ async function sendMessage() {
       scrollToBottom();
     }
 
+    if (finishReason === 'length') {
+      const note = document.createElement('div');
+      note.className = 'trunc-note';
+      note.textContent = `⚠ Response was cut off — it hit the Max Tokens limit (${tokensSlider.value}). Raise Max Tokens in Settings and regenerate.`;
+      body.appendChild(note);
+    }
     appendStats(body, { tStart, firstTokenAt, deltaCount, usage });
+    addMessageActions(body, () => fullContent);
     state.messages.push({ role: 'assistant', content: fullContent });
     saveCurrentSession();
+    maybeAutoName();
 
   } catch (err) {
     if (err.name === 'AbortError') {
       if (fullContent) {
         appendStats(body, { tStart, firstTokenAt, deltaCount, usage });
+        addMessageActions(body, () => fullContent);
         state.messages.push({ role: 'assistant', content: fullContent });
         saveCurrentSession();
       } else {
@@ -835,6 +983,7 @@ async function sendMessage() {
       setTimeout(connect, 3000);
     }
   } finally {
+    clearSlow();
     state.streaming = false;
     state.abortController = null;
     sendBtn.classList.remove('hidden');
@@ -842,6 +991,93 @@ async function sendMessage() {
     updateSendBtn();
     scrollToBottom();
   }
+}
+
+// === Per-message actions (copy / regenerate) ===
+const COPY_SVG = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+const REGEN_SVG = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>';
+
+function addMessageActions(body, getText) {
+  // Only the newest AI message can regenerate — retire older regen buttons
+  document.querySelectorAll('.msg-actions .regen-btn').forEach(b => b.remove());
+
+  let row = body.querySelector('.msg-actions');
+  if (!row) {
+    row = document.createElement('div');
+    row.className = 'msg-actions';
+    body.appendChild(row);
+  }
+  row.innerHTML = '';
+
+  const copy = document.createElement('button');
+  copy.className = 'msg-action-btn';
+  copy.innerHTML = COPY_SVG + '<span>Copy</span>';
+  copy.addEventListener('click', () => {
+    navigator.clipboard.writeText(getText());
+    const span = copy.querySelector('span');
+    span.textContent = 'Copied!';
+    setTimeout(() => span.textContent = 'Copy', 1500);
+  });
+  row.appendChild(copy);
+
+  const regen = document.createElement('button');
+  regen.className = 'msg-action-btn regen-btn';
+  regen.innerHTML = REGEN_SVG + '<span>Regenerate</span>';
+  regen.addEventListener('click', regenerate);
+  row.appendChild(regen);
+}
+
+// === Auto-naming chats ===
+// After the first exchange, quietly ask the model for a 3–5 word title.
+async function maybeAutoName() {
+  const session = state.sessions.find(s => s.id === state.currentSessionId);
+  if (!session || session.customTitle || session.autoNamed) return;
+  if (state.messages.filter(m => m.role === 'assistant').length !== 1) return;
+  session.autoNamed = true; // one attempt only, even if it fails
+
+  const userText = extractText(state.messages.find(m => m.role === 'user')?.content || '').slice(0, 400);
+  const aiText = extractText(state.messages.find(m => m.role === 'assistant')?.content || '').slice(0, 400);
+  try {
+    const resp = await fetch(state.apiBase + '/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: modelSelect.value || undefined,
+        messages: [{ role: 'user', content: `Write a short title (3-5 words) summarizing this conversation. Reply with ONLY the title — no quotes, no punctuation around it, no explanation.\n\nUser: ${userText}\nAssistant: ${aiText}` }],
+        temperature: 0.3,
+        max_tokens: 400, // headroom for models that think before answering
+        stream: false,
+      }),
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!resp.ok) return;
+    const data = await resp.json();
+    let title = data.choices?.[0]?.message?.content || '';
+    // Strip any thinking/special tokens, take the last non-empty line
+    title = title.replace(/<think(?:ing)?>[\s\S]*?(<\/think(?:ing)?>|$)/gi, '');
+    title = stripSpecialTokens(title);
+    const lines = title.split('\n').map(l => l.trim()).filter(Boolean);
+    title = (lines[lines.length - 1] || '').replace(/^["'“”]+|["'“”.]+$/g, '').trim();
+    if (!title || title.length > 80) return;
+    session.title = title;
+    persistSessions();
+    renderHistoryList();
+  } catch (e) { /* best-effort — placeholder title stays */ }
+}
+
+// === HTML preview (artifacts-lite) ===
+function openPreview(html) {
+  const modal = $('#preview-modal');
+  const frame = $('#preview-frame');
+  frame.srcdoc = html;
+  modal.classList.remove('hidden');
+}
+
+function closePreview() {
+  const modal = $('#preview-modal');
+  const frame = $('#preview-frame');
+  frame.srcdoc = '';
+  modal.classList.add('hidden');
 }
 
 function stopStreaming() {
@@ -907,7 +1143,7 @@ function saveCurrentSession() {
     state.currentSessionId = session.id;
   }
   session.messages = state.messages;
-  if (!session.customTitle) session.title = sessionTitle(state.messages);
+  if (!session.customTitle && !session.autoNamed) session.title = sessionTitle(state.messages);
   session.model = state.currentModel;
   session.settings = {
     temperature: parseFloat(tempSlider.value),
@@ -1366,6 +1602,10 @@ function setupListeners() {
   // Scroll position / pill
   chatContainer.addEventListener('scroll', onChatScroll);
   scrollPill.addEventListener('click', () => scrollToBottom(true));
+
+  // HTML preview modal
+  $('#preview-close').addEventListener('click', closePreview);
+  $('#preview-modal').addEventListener('click', e => { if (e.target.id === 'preview-modal') closePreview(); });
 
   // Drag-and-drop attachments (anywhere on the page)
   document.addEventListener('dragover', e => {

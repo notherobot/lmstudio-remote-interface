@@ -5,22 +5,26 @@
   padding: 0;
 }
 
+/* === Onu-Metru Archives palette ===
+   Deep cavern stone with glowing lightstone-cyan accents. */
 :root {
-  --bg-primary: #171717;
-  --bg-secondary: #212121;
-  --bg-hover: #2a2a2a;
-  --bg-input: #2f2f2f;
-  --text-primary: #ececec;
-  --text-secondary: #b4b4b4;
-  --text-muted: #777;
-  --accent: #10a37f;
-  --accent-hover: #0e8f6f;
+  --bg-primary: #0a1012;
+  --bg-secondary: #0e1619;
+  --bg-hover: #152125;
+  --bg-input: #101b1e;
+  --text-primary: #dcebed;
+  --text-secondary: #9db7ba;
+  --text-muted: #5c777b;
+  --accent: #38d6e6;
+  --accent-hover: #56e2f0;
+  --accent-dim: #1a5b64;
+  --accent-glow: rgba(56, 214, 230, 0.35);
   --user-bg: transparent;
   --assistant-bg: var(--bg-secondary);
   --danger: #ef4444;
-  --success: #10a37f;
-  --warning: #f59e0b;
-  --border: #333;
+  --success: #38d6e6;
+  --warning: #f5b74e;
+  --border: #1c2c30;
   --radius: 12px;
   --radius-sm: 8px;
   --header-height: 48px;
@@ -42,6 +46,12 @@ body {
   line-height: 1.6;
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Faint lightstone hex-grid etched into the cavern wall */
+#app {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='97' viewBox='0 0 56 97'%3E%3Cg fill='none' stroke='%2338d6e6' stroke-opacity='0.045' stroke-width='1'%3E%3Cpath d='M28 0 L56 16 L56 48 L28 64 L0 48 L0 16 Z'/%3E%3Cpath d='M28 64 L56 80 L56 97 M0 80 L28 64 M0 80 L0 97 M56 80 L28 97 L0 80'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 56px 97px;
 }
 
 #app {
@@ -130,7 +140,8 @@ body {
 .btn-connect {
   width: 100%;
   background: var(--accent);
-  color: #fff;
+  color: #04262b;
+  box-shadow: 0 0 18px var(--accent-glow);
   border: none;
   border-radius: var(--radius-sm);
   padding: 12px;
@@ -441,13 +452,16 @@ header {
 }
 
 .message.user .avatar {
-  background: #5b5fc7;
-  color: #fff;
+  background: #26343a;
+  color: #b9cdd1;
+  border: 1px solid var(--border);
 }
 
 .message.assistant .avatar {
-  background: var(--accent);
-  color: #fff;
+  background: #0d3d45;
+  color: var(--accent);
+  border: 1px solid var(--accent-dim);
+  box-shadow: 0 0 8px var(--accent-glow);
 }
 
 .message-body {
@@ -597,6 +611,24 @@ header {
 .message-content pre:hover .copy-btn { opacity: 1; }
 .copy-btn:hover { background: rgba(255,255,255,0.15); color: var(--text-primary); }
 
+/* Preview button (HTML blocks) — always visible, sits left of the copy button */
+.preview-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: rgba(56, 214, 230, 0.12);
+  border: 1px solid var(--accent-dim);
+  color: var(--accent);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 0.7rem;
+  cursor: pointer;
+}
+
+.preview-btn:hover { background: rgba(56, 214, 230, 0.25); }
+
+pre:has(.preview-btn) .copy-btn { right: 72px; }
+
 /* Model-loading indicator (distinct from the generation typing dots) */
 .model-loading {
   padding: 2px 0 4px;
@@ -648,7 +680,8 @@ header {
 .typing span {
   width: 6px;
   height: 6px;
-  background: var(--text-muted);
+  background: var(--accent);
+  box-shadow: 0 0 5px var(--accent-glow);
   border-radius: 50%;
   animation: typingDot 1.4s infinite;
 }
@@ -717,21 +750,28 @@ header {
 }
 
 .send-button {
-  background: var(--text-primary);
-  color: var(--bg-primary);
+  background: var(--accent);
+  color: #04262b;
+  box-shadow: 0 0 10px var(--accent-glow);
 }
 
 .send-button:disabled {
   background: var(--bg-hover);
   color: var(--text-muted);
   cursor: not-allowed;
+  box-shadow: none;
 }
 
-.send-button:not(:disabled):hover { background: #fff; }
+.send-button:not(:disabled):hover { background: var(--accent-hover); }
 .send-button:not(:disabled):active { transform: scale(0.92); }
 
-.stop-button { background: var(--text-primary); color: var(--bg-primary); }
-.stop-button:hover { background: #fff; }
+/* Stop is a danger action — make it unmissable */
+.stop-button {
+  background: var(--danger);
+  color: #fff;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+}
+.stop-button:hover { background: #ff5f5f; }
 
 .input-footer {
   text-align: center;
@@ -1077,6 +1117,97 @@ header {
   font-size: 0.85rem;
   text-align: center;
   padding: 24px 12px;
+}
+
+/* === Syntax highlighting (Archives palette) === */
+.hl-kw  { color: var(--accent); }
+.hl-str { color: #6be5b0; }
+.hl-com { color: var(--text-muted); font-style: italic; }
+.hl-num { color: #f2cc60; }
+
+/* === Per-message actions === */
+.msg-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.msg-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.msg-action-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+/* === Truncation + slow-prompt notes === */
+.trunc-note {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid rgba(245, 183, 78, 0.3);
+  border-radius: var(--radius-sm);
+  background: rgba(245, 183, 78, 0.08);
+  color: var(--warning);
+  font-size: 0.8rem;
+}
+
+.slow-note {
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-style: italic;
+}
+
+/* === HTML preview modal === */
+.preview-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.preview-panel {
+  width: 100%;
+  max-width: 960px;
+  height: 90%;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.6), 0 0 24px var(--accent-glow);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 8px 8px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+#preview-frame {
+  flex: 1;
+  width: 100%;
+  border: none;
+  background: #fff;
 }
 
 /* === Scroll-to-bottom pill === */

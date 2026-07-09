@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="theme-color" content="#171717">
+  <meta name="theme-color" content="#0a1012">
   <title>LM Studio Chat</title>
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="style.css?v=0.2.3">
+  <link rel="stylesheet" href="style.css?v=0.3.0">
 </head>
 <body>
   <div id="app">
@@ -57,7 +57,7 @@
         </div>
         <div class="setting-group">
           <label for="max-tokens">Max Tokens: <span id="tokens-value">2048</span></label>
-          <input type="range" id="max-tokens" min="64" max="8192" step="64" value="2048">
+          <input type="range" id="max-tokens" min="64" max="16384" step="64" value="2048">
         </div>
         <div class="setting-group">
           <label class="checkbox-row">
@@ -159,9 +159,22 @@
       <input type="file" id="file-input" accept=".txt,.md,.markdown,.json,.csv,.tsv,.log,.js,.jsx,.ts,.tsx,.py,.html,.htm,.css,.scss,.xml,.yaml,.yml,.toml,.ini,.sh,.bash,.java,.c,.h,.cpp,.hpp,.cs,.go,.rs,.rb,.php,.sql,.swift,.kt,.r" multiple hidden>
       <p class="input-footer">Connected via Tailscale to your LM Studio <span class="app-version"></span></p>
     </footer>
+
+    <!-- HTML preview modal (artifacts-lite) -->
+    <div id="preview-modal" class="preview-modal hidden">
+      <div class="preview-panel">
+        <div class="preview-head">
+          <span>Preview</span>
+          <button id="preview-close" class="icon-btn" aria-label="Close preview">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <iframe id="preview-frame" sandbox="allow-scripts" title="HTML preview"></iframe>
+      </div>
+    </div>
   </div>
 
   <script src="marked.min.js"></script>
-  <script src="app.js?v=0.2.3"></script>
+  <script src="app.js?v=0.3.0"></script>
 </body>
 </html>
