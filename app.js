@@ -1,7 +1,7 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.4.0';
+const APP_VERSION = 'v0.4.1';
 const APP_VERSION_DATE = '2026-07-09';
 
 // === State ===
@@ -58,9 +58,7 @@ const userInput      = $('#user-input');
 const sendBtn        = $('#send-btn');
 const stopBtn        = $('#stop-btn');
 
-const attachImageBtn = $('#attach-image-btn');
 const attachFileBtn  = $('#attach-file-btn');
-const imageInput     = $('#image-input');
 const fileInput      = $('#file-input');
 const attachmentsEl  = $('#attachments');
 
@@ -181,7 +179,6 @@ async function connect() {
     modelSelect.innerHTML = '<option value="">Offline</option>';
     modelSelect.disabled = true;
     state.modelCaps.vision = false;
-    attachImageBtn.classList.add('hidden');
     // Retry silently
     setTimeout(connect, 5000);
   }
@@ -236,6 +233,7 @@ function showChat() {
   headerEl.classList.remove('hidden');
   chatContainer.classList.remove('hidden');
   inputArea.classList.remove('hidden');
+  chatContainer.classList.toggle('chat-empty', !!welcome && welcome.style.display !== 'none');
   autoGrow(); // size the textarea now that it's visible (avoids a collapsed/cropped field)
   userInput.focus();
 }
@@ -248,13 +246,13 @@ function showSetup() {
   state.modelCaps.vision = false;
   clearAttachments();
   closeHistory();
-  attachImageBtn.classList.add('hidden');
   localStorage.removeItem('lmstudio-server-url');
   setStatus('disconnected');
   modelSelect.innerHTML = '<option value="">Offline</option>';
   modelSelect.disabled = true;
   messagesEl.innerHTML = '';
-  if (welcome) { welcome.style.display = ''; messagesEl.appendChild(welcome); }
+  if (welcome) messagesEl.appendChild(welcome);
+  showWelcome(true);
 
   setup.classList.remove('hidden');
   headerEl.classList.add('hidden');
@@ -266,8 +264,16 @@ function showSetup() {
 }
 
 // === Chat ===
+// Nothing to scroll on the welcome screen, so lock #chat-container's
+// overflow while it's showing — otherwise a stray touch there triggers an
+// elastic rubber-band bounce with no content backing it.
+function showWelcome(visible) {
+  if (welcome) welcome.style.display = visible ? '' : 'none';
+  chatContainer.classList.toggle('chat-empty', visible);
+}
+
 function hideWelcome() {
-  if (welcome) welcome.style.display = 'none';
+  showWelcome(false);
 }
 
 function addMessage(role, content, isError) {
@@ -485,13 +491,12 @@ function modelType(id) {
   return state.modelMeta[id]?.type || (nameSuggestsVision(id) ? 'vlm' : '');
 }
 
-// Detect capabilities of the active model and show/hide the image button.
+// Detect capabilities of the active model.
 function refreshModelCaps() {
   const model = modelSelect.value;
   const vision = modelType(model) === 'vlm';
 
   state.modelCaps.vision = vision;
-  attachImageBtn.classList.toggle('hidden', !vision);
 
   // Drop any pending image attachments if the new model can't see them
   if (!vision && state.attachments.some(a => a.kind === 'image')) {
@@ -1182,7 +1187,8 @@ function newChat() {
   state.currentSessionId = null;
   clearAttachments();
   messagesEl.innerHTML = '';
-  if (welcome) { welcome.style.display = ''; messagesEl.appendChild(welcome); }
+  if (welcome) messagesEl.appendChild(welcome);
+  showWelcome(true);
   renderHistoryList();
   if (!inputArea.classList.contains('hidden')) userInput.focus();
 }
@@ -1274,7 +1280,8 @@ function loadSession(id) {
   }
 
   messagesEl.innerHTML = '';
-  if (welcome) { welcome.style.display = 'none'; messagesEl.appendChild(welcome); }
+  if (welcome) messagesEl.appendChild(welcome);
+  showWelcome(false);
   state.messages.forEach(renderStoredMessage);
   scrollToBottom(true);
 
@@ -1499,6 +1506,19 @@ function readFile(file, asDataUrl) {
   });
 }
 
+// Splits a mixed file list (from the picker or a drag-drop) into images vs
+// everything else, routing each to its handler.
+function handleAttachedFiles(files) {
+  if (!files.length) return;
+  const images = files.filter(f => f.type.startsWith('image/'));
+  const texts = files.filter(f => !f.type.startsWith('image/'));
+  if (images.length) {
+    if (state.modelCaps.vision) handleImageFiles(images);
+    else alert('The current model doesn\'t support images.');
+  }
+  if (texts.length) handleTextFiles(texts);
+}
+
 async function handleImageFiles(files) {
   for (const file of files) {
     if (!file.type.startsWith('image/')) continue;
@@ -1671,11 +1691,10 @@ function setupListeners() {
   sendBtn.addEventListener('click', () => { if (!state.streaming) sendMessage(); });
   stopBtn.addEventListener('click', stopStreaming);
 
-  // Attachments
-  attachImageBtn.addEventListener('click', () => imageInput.click());
+  // Attachments — one button/input covers both, so mobile browsers show
+  // their native "Take Photo / Photo Library / Browse Files" sheet.
   attachFileBtn.addEventListener('click', () => fileInput.click());
-  imageInput.addEventListener('change', e => { handleImageFiles([...e.target.files]); e.target.value = ''; });
-  fileInput.addEventListener('change', e => { handleTextFiles([...e.target.files]); e.target.value = ''; });
+  fileInput.addEventListener('change', e => { handleAttachedFiles([...e.target.files]); e.target.value = ''; });
   userInput.addEventListener('paste', e => {
     if (!state.modelCaps.vision) return;
     const imgs = [...(e.clipboardData?.items || [])]
@@ -1712,15 +1731,7 @@ function setupListeners() {
     e.preventDefault();
     composerEl.classList.remove('drag-over');
     if (!state.connected) return;
-    const files = [...(e.dataTransfer?.files || [])];
-    if (!files.length) return;
-    const images = files.filter(f => f.type.startsWith('image/'));
-    const texts = files.filter(f => !f.type.startsWith('image/'));
-    if (images.length) {
-      if (state.modelCaps.vision) handleImageFiles(images);
-      else alert('The current model doesn\'t support images.');
-    }
-    if (texts.length) handleTextFiles(texts);
+    handleAttachedFiles([...(e.dataTransfer?.files || [])]);
   });
 
   // Reconnect when tab becomes visible
