@@ -584,6 +584,8 @@ header::before {
   line-height: 1.65;
   word-wrap: break-word;
   overflow-wrap: break-word;
+  overflow-x: hidden;
+  max-width: 100%;
   padding: 12px 15px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
@@ -715,8 +717,25 @@ header::before {
 .message-content a { color: var(--accent); text-decoration: none; }
 .message-content a:hover { text-decoration: underline; }
 
-.message-content table { border-collapse: collapse; margin: 0.6em 0; width: 100%; font-size: 0.9em; }
-.message-content th, .message-content td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
+/* table-layout: fixed forces columns to share the container's width instead
+   of growing to fit their widest content — combined with break-word on the
+   cells, this keeps wide tables from pushing the card (and the page) into
+   horizontal scroll. */
+.message-content table {
+  border-collapse: collapse;
+  margin: 0.6em 0;
+  width: 100%;
+  max-width: 100%;
+  table-layout: fixed;
+  font-size: 0.9em;
+}
+.message-content th, .message-content td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
 .message-content th { background: rgba(255,255,255,0.04); }
 
 .message-content hr { border: none; border-top: 1px solid var(--border); margin: 1em 0; }
