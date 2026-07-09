@@ -1,7 +1,7 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.3.6';
+const APP_VERSION = 'v0.3.7';
 const APP_VERSION_DATE = '2026-07-09';
 
 // === State ===
@@ -1739,12 +1739,33 @@ function setupListeners() {
   // so there's nothing left for the browser to scroll.
   if (window.visualViewport) {
     const vv = window.visualViewport;
+    // Safari can also pan the *visual* viewport itself (a compositor-level
+    // offset, separate from any DOM scroll position) to bring a focused
+    // input into view — it does this because none of our ancestors are
+    // scrollable, so it's WebKit's fallback. That pan doesn't clear itself
+    // and isn't blocked by overflow/position tricks; window.scrollTo(0, 0)
+    // is what actually resets it.
+    const resetScroll = () => {
+      window.scrollTo(0, 0);
+      document.body.scrollTop = 0;
+      document.documentElement.scrollTop = 0;
+    };
     const syncAppHeight = () => {
       document.documentElement.style.setProperty('--app-height', vv.height + 'px');
+      resetScroll();
     };
     vv.addEventListener('resize', syncAppHeight);
     vv.addEventListener('scroll', syncAppHeight);
     syncAppHeight();
+
+    // The keyboard-open animation settles after the resize/scroll events
+    // fire, so re-assert a few times to catch WebKit's pan once it's done.
+    userInput.addEventListener('focus', () => {
+      resetScroll();
+      setTimeout(resetScroll, 50);
+      setTimeout(resetScroll, 150);
+      setTimeout(resetScroll, 350);
+    });
   }
 }
 
