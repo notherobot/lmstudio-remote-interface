@@ -414,6 +414,12 @@ header::before {
 
 .btn-sm:hover { background: linear-gradient(to bottom, #fff, var(--accent-hover) 60%, var(--accent)); }
 
+.setting-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 8px;
+}
+
 .setting-group textarea {
   width: 100%;
   background: var(--bg-input);
@@ -922,13 +928,6 @@ pre:has(.preview-btn) .copy-btn { right: 72px; }
 }
 .stop-button:hover { background: linear-gradient(to bottom, #ffb3b3, #ff5f5f 55%, var(--danger)); }
 
-.input-footer {
-  text-align: center;
-  font-size: 0.72rem;
-  color: var(--text-muted);
-  margin-top: 8px;
-}
-
 /* === Version label === */
 .app-version {
   color: var(--text-muted);
@@ -938,10 +937,6 @@ pre:has(.preview-btn) .copy-btn { right: 72px; }
 
 .setup-card .app-version {
   margin-top: 24px;
-}
-
-.input-footer .app-version {
-  opacity: 0.6;
 }
 
 .version-date {
