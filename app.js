@@ -1,7 +1,7 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.3.3';
+const APP_VERSION = 'v0.3.4';
 const APP_VERSION_DATE = '2026-07-09';
 
 // === State ===
@@ -77,8 +77,14 @@ const composerEl     = $('.composer');
 
 // === Init ===
 function init() {
+  const versionFull = `${APP_VERSION} · ${formatVersionDate(APP_VERSION_DATE)}`;
   document.querySelectorAll('.app-version').forEach(el => {
-    el.innerHTML = `${escapeHtml(APP_VERSION)} <span class="version-date">· ${escapeHtml(formatVersionDate(APP_VERSION_DATE))}</span>`;
+    if (el.classList.contains('header-version')) {
+      el.textContent = APP_VERSION;
+      el.title = versionFull;
+    } else {
+      el.innerHTML = `${escapeHtml(APP_VERSION)} <span class="version-date">· ${escapeHtml(formatVersionDate(APP_VERSION_DATE))}</span>`;
+    }
   });
   loadSettings();
   loadSessions();

@@ -185,6 +185,15 @@ header {
   gap: 8px;
 }
 
+.header-version {
+  white-space: nowrap;
+  font-size: 0.7rem;
+}
+
+@media (max-width: 400px) {
+  .header-version { display: none; }
+}
+
 .status {
   width: 8px;
   height: 8px;
