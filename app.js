@@ -1,7 +1,7 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.3.2';
+const APP_VERSION = 'v0.3.3';
 const APP_VERSION_DATE = '2026-07-09';
 
 // === State ===
@@ -1721,6 +1721,21 @@ function setupListeners() {
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && state.apiBase && !state.connected && !state.streaming) connect();
   });
+
+  // Keep the composer pinned above the on-screen keyboard. Mobile browsers
+  // don't reliably keep `position: fixed` elements above the keyboard (the
+  // fixed footer can end up anchored behind it), so measure the actual
+  // visible viewport and push the footer up by the keyboard's height.
+  if (window.visualViewport) {
+    const vv = window.visualViewport;
+    const syncKeyboardOffset = () => {
+      const offset = window.innerHeight - vv.height - vv.offsetTop;
+      document.documentElement.style.setProperty('--kb-offset', Math.max(0, Math.round(offset)) + 'px');
+    };
+    vv.addEventListener('resize', syncKeyboardOffset);
+    vv.addEventListener('scroll', syncKeyboardOffset);
+    syncKeyboardOffset();
+  }
 }
 
 // === Service Worker ===

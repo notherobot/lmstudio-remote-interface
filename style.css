@@ -31,11 +31,13 @@
   --max-width: 768px;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --kb-offset: 0px;
 }
 
 html, body {
   height: 100%;
   overflow: hidden;
+  overscroll-behavior: none;
 }
 
 body {
@@ -699,7 +701,7 @@ pre:has(.preview-btn) .copy-btn { right: 72px; }
 /* === Input Area === */
 #input-area {
   position: fixed;
-  bottom: var(--safe-bottom);
+  bottom: calc(var(--safe-bottom) + var(--kb-offset, 0px));
   left: 0;
   right: 0;
   padding: 0 16px 12px;
