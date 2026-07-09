@@ -48,10 +48,12 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Faint lightstone hex-grid etched into the cavern wall */
+/* Faint lightstone honeycomb etched into the cavern wall.
+   Seamless pointy-top hex tile: one full hexagon (side 16) + the vertical
+   stem that joins it to the row below. Tile = 28 x 48. */
 #app {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='97' viewBox='0 0 56 97'%3E%3Cg fill='none' stroke='%2338d6e6' stroke-opacity='0.045' stroke-width='1'%3E%3Cpath d='M28 0 L56 16 L56 48 L28 64 L0 48 L0 16 Z'/%3E%3Cpath d='M28 64 L56 80 L56 97 M0 80 L28 64 M0 80 L0 97 M56 80 L28 97 L0 80'/%3E%3C/g%3E%3C/svg%3E");
-  background-size: 56px 97px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='48' viewBox='0 0 28 48'%3E%3Cpath d='M14 0 L28 8 L28 24 L14 32 L0 24 L0 8 Z M14 32 L14 48' fill='none' stroke='%2338d6e6' stroke-opacity='0.05' stroke-width='1'/%3E%3C/svg%3E");
+  background-size: 28px 48px;
 }
 
 #app {

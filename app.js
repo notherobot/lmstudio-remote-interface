@@ -1,7 +1,7 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.3.0';
+const APP_VERSION = 'v0.3.1';
 const APP_VERSION_DATE = '2026-07-09';
 
 // === State ===
@@ -573,7 +573,21 @@ function renderMessage(text, streaming) {
       const before = rest.slice(0, openIdx);
       if (before.trim()) html += renderMarkdown(before);
       const inner = rest.slice(openIdx).replace(/^<think(?:ing)?>/i, '');
-      html += thinkBlock(inner, true);
+      if (streaming) {
+        html += thinkBlock(inner, true);
+      } else {
+        // The block never closed but the message is complete — some models
+        // (and some LM Studio templates) open <think> and never emit the
+        // closing tag, gluing the answer onto the end of the reasoning.
+        // Find the boundary so the answer isn't trapped in the dropdown.
+        const split = findAnswerBoundary(inner);
+        if (split) {
+          html += thinkBlock(split.reasoning, false);
+          html += renderMarkdown(split.answer.trim());
+        } else {
+          html += thinkBlock(inner, false);
+        }
+      }
     } else if (rest.trim()) {
       html += renderMarkdown(rest);
     }
@@ -600,7 +614,9 @@ const REASON_PREAMBLE = /^(?:\s*(?:>|#{1,4})?\s*)?(?:okay[,]?\s+)?(here'?s\s+(?:
 const ANSWER_HEADING = /^\s{0,3}(?:[-*]|\d+[.)])?\s*(?:#{1,4}\s*)?(?:\*\*)?\s*(?:final\s+response|final\s+answer|draft\s+response|my\s+(?:response|answer)|(?:response|answer|output|reply|solution)\s*:)\b[\s:.\-–—)*]*(.*)$/i;
 // B) Answer-opener phrase — the answer STARTS on this line (kept in the answer).
 const ANSWER_OPENER = /^\s{0,3}>?\s*(?:here'?s|here\s+is|below\s+is|this\s+is)\s+(?:the|my|a|an|your)\s+(?:updated|revised|final|fixed|corrected|complete|completed|new|working|refined|improved|full|cleaned[-\s]?up|reworked|modified)\b/i;
-const LISTY = /^(?:[-*>]|\d+[.)]|#{1,6}\s|\|)/;
+// Markdown list/heading/quote/table starters. List markers require a trailing
+// space so bold text (**x**) and decimals (3.14) aren't mistaken for lists.
+const LISTY = /^(?:[-*]\s|>|\d+[.)]\s|#{1,6}\s|\|)/;
 
 // Close a dangling ``` fence so a split doesn't leak broken markdown.
 function balanceFences(s) {
@@ -608,9 +624,10 @@ function balanceFences(s) {
   return fences % 2 ? s + '\n```' : s;
 }
 
-function detectFreeformReasoning(text, streaming) {
-  if (!REASON_PREAMBLE.test(text)) return null;
-
+// Find where reasoning ends and the answer begins inside a completed blob of
+// text. Used both for un-tagged "thinking out loud" output and for <think>
+// blocks that were never closed. Returns {reasoning, answer} or null.
+function findAnswerBoundary(text) {
   const lines = text.split('\n');
   let headingIdx = -1, inlineAnswer = '', openerIdx = -1;
   for (let i = 0; i < lines.length; i++) {
@@ -636,9 +653,6 @@ function detectFreeformReasoning(text, streaming) {
     if (answer.trim()) return { reasoning, answer };
   }
 
-  // Still streaming: keep it collapsed as "Thinking…" until the boundary arrives.
-  if (streaming) return { reasoning: text, answer: '', streaming: true };
-
   // Narrow, safe structural rule: a single plain-prose block that directly
   // follows a block of reasoning steps (a list) is the answer. This only fires
   // for the clean "steps → answer" shape, never when prose meta precedes it.
@@ -654,6 +668,18 @@ function detectFreeformReasoning(text, streaming) {
       return { reasoning: blocks.slice(0, end).join('\n\n'), answer: last };
     }
   }
+
+  return null;
+}
+
+function detectFreeformReasoning(text, streaming) {
+  if (!REASON_PREAMBLE.test(text)) return null;
+
+  const found = findAnswerBoundary(text);
+  if (found) return found;
+
+  // Still streaming: keep it collapsed as "Thinking…" until the boundary arrives.
+  if (streaming) return { reasoning: text, answer: '', streaming: true };
 
   // No confident boundary — don't collapse (never hide or mangle the answer).
   return null;
