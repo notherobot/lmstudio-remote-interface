@@ -40,6 +40,15 @@ html, body {
 }
 
 body {
+  /* Safari still scrolls the document to bring a focused input into view
+     even when overflow is hidden — that's a WebKit-level behavior, not a
+     CSS one. Pinning body to position: fixed removes it from Safari's
+     scrollable-document bookkeeping entirely, which is what actually stops
+     the jump (this bites hardest in standalone/home-screen Safari, which
+     has no browser chrome to absorb the difference). */
+  position: fixed;
+  inset: 0;
+  width: 100%;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
   background: var(--bg-primary);
   color: var(--text-primary);
