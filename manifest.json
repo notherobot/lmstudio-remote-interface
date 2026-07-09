@@ -1,7 +1,7 @@
 {
-  "name": "LM Studio Chat",
-  "short_name": "LM Chat",
-  "description": "Chat interface for LM Studio",
+  "name": "Archivist",
+  "short_name": "Archivist",
+  "description": "Archivist — a chat interface for LM Studio",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#0a1012",

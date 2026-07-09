@@ -1,4 +1,4 @@
-# LM Studio Chat
+# Archivist
 
 A personal chat interface hosted on GitHub Pages that connects to LM Studio running on your PC via Tailscale. Access your local LLM from your phone, tablet, or any browser — anywhere.
 

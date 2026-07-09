@@ -1,7 +1,7 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.3.2';
+const APP_VERSION = 'v0.4.0';
 const APP_VERSION_DATE = '2026-07-09';
 
 // === State ===
@@ -548,15 +548,16 @@ function renderMessage(text, streaming) {
       if (answer.trim()) html += renderMarkdown(answer.trim());
     } else {
       // No final channel marker (yet). While streaming that's normal; once
-      // complete, try to find the answer inside; if there is none (e.g. token
-      // limit hit mid-thought), keep it collapsed but accessible.
+      // complete, try to find the answer inside. If none can be found, render
+      // the block EXPANDED — the answer may be trapped in there, and an open
+      // box beats a hidden answer.
       const inner = stripSpecialTokens(afterThink);
       const split = !streaming ? findAnswerBoundary(inner) : null;
       if (split && split.answer.trim()) {
         html += thinkBlock(split.reasoning, false);
         html += renderMarkdown(split.answer.trim());
       } else {
-        html += thinkBlock(inner, !!streaming);
+        html += thinkBlock(inner, !!streaming, !streaming);
       }
     }
     return html || renderMarkdown(stripSpecialTokens(text));
@@ -587,7 +588,9 @@ function renderMessage(text, streaming) {
     // If the completed message is nothing but think content — either the tag
     // never closed, or the reasoning parser swallowed the answer too (the
     // telltale: answer glued on with no space after the last thought) — find
-    // the boundary inside the last block so the answer isn't trapped.
+    // the boundary inside the last block so the answer isn't trapped. When no
+    // boundary exists, render the block EXPANDED: the answer may be in there,
+    // and an open box beats a hidden answer.
     if (!streaming) {
       const last = parts[parts.length - 1];
       const hasAnswerOutside = parts.some(p => p.type === 'md');
@@ -596,6 +599,8 @@ function renderMessage(text, streaming) {
         if (split && split.answer.trim()) {
           last.text = split.reasoning;
           parts.push({ type: 'md', text: split.answer });
+        } else {
+          last.forceOpen = true;
         }
       }
     }
@@ -603,7 +608,7 @@ function renderMessage(text, streaming) {
     let html = '';
     for (const p of parts) {
       if (p.type === 'md') html += renderMarkdown(p.text.trim());
-      else html += thinkBlock(p.text, !!p.open && !!streaming);
+      else html += thinkBlock(p.text, !!p.open && !!streaming, !!p.forceOpen);
     }
     return html || renderMarkdown(text);
   }
@@ -667,11 +672,14 @@ function findAnswerBoundary(text) {
     if (answer.trim()) return { reasoning, answer };
   }
 
-  // C) Glued seam: a sentence end jammed directly against a capitalized word
-  // with no space ("…irrational number.The square root…"). That's the
-  // telltale of a template/parser concatenating the reasoning and the answer
-  // as separate generations. Split at the last such seam outside code fences.
-  const GLUE_RE = /[a-z]{2,}[.!?](?=[A-Z][a-z])/g;
+  // C) Glued seam: a sentence end jammed directly against the start of a new
+  // sentence with no space ("…irrational number.The square root…",
+  // "…(January 2025).The CEO…"). That's the telltale of a template/parser
+  // concatenating reasoning and answer as separate generations. The sentence
+  // may end after letters, digits, closing brackets/quotes, or a percent
+  // sign, and the answer may start with a capitalized word, "I", or bold
+  // text. Split at the last such seam outside code fences.
+  const GLUE_RE = /(?:[a-z]{2}|\d|[)\]"”'’%])[.!?](?=[A-Z][a-z]|I\b)|(?:[a-z]{2}|\d|[)\]"”'’%])[.!?:](?=\*\*[A-Za-z0-9])/g;
   let glueEnd = -1;
   let g;
   while ((g = GLUE_RE.exec(text)) !== null) {
@@ -715,11 +723,11 @@ function detectFreeformReasoning(text, streaming) {
   return null;
 }
 
-function thinkBlock(inner, streaming) {
+function thinkBlock(inner, streaming, open) {
   const trimmed = balanceFences(inner.trim());
   const body = trimmed ? renderMarkdown(trimmed) : '<em>Thinking…</em>';
   const label = streaming ? 'Thinking…' : 'Thought process';
-  return `<details class="think-block"><summary>${label}</summary><div class="think-content">${body}</div></details>`;
+  return `<details class="think-block"${open ? ' open' : ''}><summary>${label}</summary><div class="think-content">${body}</div></details>`;
 }
 
 // === Syntax highlighting (dependency-free) ===
@@ -1018,8 +1026,12 @@ async function generateReply() {
       note.textContent = `⚠ Response was cut off — it hit the Max Tokens limit (${tokensSlider.value}). Raise Max Tokens in Settings and regenerate.`;
       body.appendChild(note);
     }
+    const getRaw = () => JSON.stringify({
+      model: targetModel, finish_reason: finishReason,
+      reasoning_content: reasoning || undefined, content: fullContent,
+    }, null, 2);
     appendStats(body, { tStart, firstTokenAt, deltaCount, usage });
-    addMessageActions(body, () => fullContent);
+    addMessageActions(body, () => fullContent, getRaw);
     state.messages.push({ role: 'assistant', content: fullContent });
     saveCurrentSession();
     maybeAutoName();
@@ -1028,7 +1040,7 @@ async function generateReply() {
     if (err.name === 'AbortError') {
       if (fullContent) {
         appendStats(body, { tStart, firstTokenAt, deltaCount, usage });
-        addMessageActions(body, () => fullContent);
+        addMessageActions(body, () => fullContent, () => JSON.stringify({ model: targetModel, aborted: true, reasoning_content: reasoning || undefined, content: fullContent }, null, 2));
         state.messages.push({ role: 'assistant', content: fullContent });
         saveCurrentSession();
       } else {
@@ -1056,7 +1068,7 @@ async function generateReply() {
 const COPY_SVG = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
 const REGEN_SVG = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>';
 
-function addMessageActions(body, getText) {
+function addMessageActions(body, getText, getRaw) {
   // Only the newest AI message can regenerate — retire older regen buttons
   document.querySelectorAll('.msg-actions .regen-btn').forEach(b => b.remove());
 
@@ -1084,6 +1096,22 @@ function addMessageActions(body, getText) {
   regen.innerHTML = REGEN_SVG + '<span>Regenerate</span>';
   regen.addEventListener('click', regenerate);
   row.appendChild(regen);
+
+  // Debug aid: copy the exact raw payload (reasoning channel, content,
+  // finish reason) so rendering issues can be diagnosed from ground truth.
+  if (getRaw) {
+    const raw = document.createElement('button');
+    raw.className = 'msg-action-btn';
+    raw.innerHTML = '<span>Raw</span>';
+    raw.title = 'Copy the raw model output for debugging';
+    raw.addEventListener('click', () => {
+      navigator.clipboard.writeText(getRaw());
+      const span = raw.querySelector('span');
+      span.textContent = 'Copied!';
+      setTimeout(() => span.textContent = 'Raw', 1500);
+    });
+    row.appendChild(raw);
+  }
 }
 
 // === Auto-naming chats ===
