@@ -1,11 +1,11 @@
 {
-  "name": "Archivist",
-  "short_name": "Archivist",
-  "description": "Archivist — a chat interface for LM Studio",
+  "name": "Scholar",
+  "short_name": "Scholar",
+  "description": "Scholar — a chat interface for LM Studio",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#0a1012",
-  "theme_color": "#0a1012",
+  "background_color": "#0a121c",
+  "theme_color": "#0a121c",
   "orientation": "any",
   "icons": [
     {

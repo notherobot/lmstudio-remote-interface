@@ -11,27 +11,27 @@
   font-display: swap;
 }
 
-/* === Onu-Metru Archives palette ===
-   Deep cavern stone with glowing lightstone-cyan accents. */
+/* === Ko-Metru Towers palette ===
+   Icy knowledge-spire blues with crystal-frost accents. */
 :root {
-  --bg-primary: #0a1012;
-  --bg-secondary: #0e1619;
-  --bg-hover: #152125;
-  --bg-input: #101b1e;
-  --bg-lift: #1a2a2e;
-  --text-primary: #dcebed;
-  --text-secondary: #9db7ba;
-  --text-muted: #5c777b;
-  --accent: #38d6e6;
-  --accent-hover: #56e2f0;
-  --accent-dim: #1a5b64;
-  --accent-glow: rgba(56, 214, 230, 0.35);
-  --user-bg: rgba(14, 22, 25, 0.9);
-  --assistant-bg: rgba(14, 22, 25, 0.4);
+  --bg-primary: #0a121c;
+  --bg-secondary: #0d1a26;
+  --bg-hover: #17293a;
+  --bg-input: #101d2a;
+  --bg-lift: #1b3245;
+  --text-primary: #e6f2fa;
+  --text-secondary: #a3c2d6;
+  --text-muted: #5f7f96;
+  --accent: #7ecbf5;
+  --accent-hover: #a3ddff;
+  --accent-dim: #2c5872;
+  --accent-glow: rgba(126, 203, 245, 0.35);
+  --user-bg: rgba(13, 26, 38, 0.9);
+  --assistant-bg: rgba(13, 26, 38, 0.4);
   --danger: #ef4444;
-  --success: #38d6e6;
+  --success: #7ecbf5;
   --warning: #f5b74e;
-  --border: #1c2c30;
+  --border: #1e3344;
   --radius: 14px;
   --radius-sm: 9px;
   --header-height: 50px;
@@ -74,11 +74,11 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Faint lightstone honeycomb etched into the cavern wall.
+/* Faint frost lattice etched into the tower glass.
    Seamless pointy-top hex tile: one full hexagon (side 16) + the vertical
    stem that joins it to the row below. Tile = 28 x 48. */
 #app {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='48' viewBox='0 0 28 48'%3E%3Cpath d='M14 0 L28 8 L28 24 L14 32 L0 24 L0 8 Z M14 32 L14 48' fill='none' stroke='%2338d6e6' stroke-opacity='0.05' stroke-width='1'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='48' viewBox='0 0 28 48'%3E%3Cpath d='M14 0 L28 8 L28 24 L14 32 L0 24 L0 8 Z M14 32 L14 48' fill='none' stroke='%237ecbf5' stroke-opacity='0.05' stroke-width='1'/%3E%3C/svg%3E");
   background-size: 28px 48px;
 }
 
@@ -579,7 +579,7 @@ header::before {
 }
 
 .message.assistant .avatar {
-  background: linear-gradient(to bottom, #12525c, #0d3d45);
+  background: linear-gradient(to bottom, #1a4a63, #123249);
   color: var(--accent);
   border: 1px solid var(--accent-dim);
   box-shadow: var(--shadow-btn), 0 0 8px var(--accent-glow);
@@ -1312,7 +1312,7 @@ pre:has(.preview-btn) .copy-btn { right: 72px; }
   padding: 24px 12px;
 }
 
-/* === Syntax highlighting (Archives palette) === */
+/* === Syntax highlighting (Towers palette) === */
 .hl-kw  { color: var(--accent); }
 .hl-str { color: #6be5b0; }
 .hl-com { color: var(--text-muted); font-style: italic; }
