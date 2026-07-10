@@ -7,6 +7,7 @@ const ASSETS = [
   './app.js',
   './marked.min.js',
   './manifest.json',
+  './favicon.png',
   './icon-192.png',
   './icon-512.png',
   './fonts/Matoran.ttf',
