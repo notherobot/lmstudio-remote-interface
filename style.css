@@ -74,12 +74,21 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Faint frost lattice etched into the tower glass.
-   Seamless pointy-top hex tile: one full hexagon (side 16) + the vertical
-   stem that joins it to the row below. Tile = 28 x 48. */
+/* Ko-Metru tower emblem, watermark-faint, etched into the app shell.
+   Mobile crops in tight on the tower tips (matches the ring/tower reference
+   crop); desktop backs off to show the full mark centered under the header. */
 #app {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='48' viewBox='0 0 28 48'%3E%3Cpath d='M14 0 L28 8 L28 24 L14 32 L0 24 L0 8 Z M14 32 L14 48' fill='none' stroke='%237ecbf5' stroke-opacity='0.05' stroke-width='1'/%3E%3C/svg%3E");
-  background-size: 28px 48px;
+  background-image: url("images/tower-mark.png");
+  background-repeat: no-repeat;
+  background-position: center top;
+  background-size: auto 92vh;
+}
+
+@media (min-width: 768px) {
+  #app {
+    background-position: center 48px;
+    background-size: 520px auto;
+  }
 }
 
 #app {
