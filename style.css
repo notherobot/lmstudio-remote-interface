@@ -80,13 +80,13 @@ body {
 #app {
   background-image: url("images/tower-mark.png");
   background-repeat: no-repeat;
-  background-position: center top;
+  background-position: center 30px;
   background-size: auto 92vh;
 }
 
 @media (min-width: 768px) {
   #app {
-    background-position: center 48px;
+    background-position: center 78px;
     background-size: 520px auto;
   }
 }
