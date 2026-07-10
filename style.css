@@ -385,7 +385,8 @@ header::before {
   margin-bottom: 6px;
 }
 
-.setting-group input[type="text"] {
+.setting-group input[type="text"],
+.setting-group input[type="password"] {
   width: 100%;
   background: var(--bg-input);
   border: 1px solid var(--border);
@@ -399,7 +400,14 @@ header::before {
   box-shadow: var(--shadow-sunken);
 }
 
-.setting-group input[type="text"]:focus { border-color: var(--accent); box-shadow: var(--shadow-sunken), 0 0 0 3px var(--accent-glow); }
+.setting-group input[type="text"]:focus,
+.setting-group input[type="password"]:focus { border-color: var(--accent); box-shadow: var(--shadow-sunken), 0 0 0 3px var(--accent-glow); }
+
+.label-optional {
+  color: var(--text-muted);
+  font-weight: 400;
+  font-size: 0.85em;
+}
 
 .btn-sm {
   background: linear-gradient(to bottom, var(--accent-hover), var(--accent) 60%, #1fb8c9);

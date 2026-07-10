@@ -1,8 +1,8 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.4.4';
-const APP_VERSION_DATE = '2026-07-09';
+const APP_VERSION = 'v0.5.0';
+const APP_VERSION_DATE = '2026-07-10';
 
 // === State ===
 const state = {
@@ -12,6 +12,7 @@ const state = {
   streaming: false,
   abortController: null,
   currentModel: null,
+  currentBackend: 'lmstudio', // 'lmstudio' (direct) or 'anythingllm' (workspace)
   modelCaps: { vision: false },
   modelMeta: {},          // { [modelId]: { type: 'llm'|'vlm'|... } } from /api/v0/models
   lastLoadedModel: null,  // model that last actually produced output — drives the loading bar
@@ -19,6 +20,12 @@ const state = {
   sessions: [],          // saved chat sessions
   currentSessionId: null,
   stickToBottom: true,   // auto-scroll only while the user is at the bottom
+  // Optional AnythingLLM backend (Tier 1 hybrid). LM Studio stays the required
+  // backbone; when a URL + key are set, that instance's workspaces are added
+  // to the model picker so a chat can be routed to RAG/agents instead of the
+  // model directly. Talks to AnythingLLM's OpenAI-compatible endpoints, so the
+  // same request/stream shape as LM Studio is reused.
+  anythingllm: { url: '', key: '', workspaces: [] },
 };
 
 // === DOM ===
@@ -43,6 +50,10 @@ const sidebarOverlay = $('#sidebar-overlay');
 const sidebarClose   = $('#sidebar-close');
 const sidebarUrl     = $('#sidebar-url');
 const sidebarReconn  = $('#sidebar-reconnect');
+const anythingUrl    = $('#anythingllm-url');
+const anythingKey    = $('#anythingllm-key');
+const anythingSave   = $('#anythingllm-save');
+const anythingStatus = $('#anythingllm-status');
 const disconnectBtn  = $('#disconnect-btn');
 const systemPrompt   = $('#system-prompt');
 const tempSlider     = $('#temperature');
@@ -87,6 +98,7 @@ function init() {
   loadSettings();
   loadSessions();
   setupListeners();
+  updateAnythingStatus();
 
   // If we have a saved URL, skip setup and connect
   const savedUrl = localStorage.getItem('lmstudio-server-url');
@@ -111,6 +123,10 @@ function loadSettings() {
     collapseToggle.checked = s.collapseThinking ?? true;
     tempValue.textContent = tempSlider.value;
     tokensValue.textContent = tokensSlider.value;
+    state.anythingllm.url = s.anythingllmUrl || '';
+    state.anythingllm.key = s.anythingllmKey || '';
+    if (anythingUrl) anythingUrl.value = state.anythingllm.url;
+    if (anythingKey) anythingKey.value = state.anythingllm.key;
   } catch(e) { /* ignore */ }
 }
 
@@ -121,6 +137,8 @@ function saveSettings() {
     maxTokens: parseInt(tokensSlider.value),
     stream: streamToggle.checked,
     collapseThinking: collapseToggle.checked,
+    anythingllmUrl: state.anythingllm.url,
+    anythingllmKey: state.anythingllm.key,
   }));
 }
 
@@ -147,29 +165,15 @@ async function connect() {
     const data = await resp.json();
     state.connected = true;
 
-    const prevModel = state.currentModel;
-    modelSelect.innerHTML = '';
-    modelSelect.disabled = false;
     const models = data.data || [];
-    if (models.length === 0) {
-      modelSelect.innerHTML = '<option value="">No models loaded</option>';
-    } else {
-      models.forEach(m => {
-        const opt = document.createElement('option');
-        opt.value = m.id;
-        opt.textContent = prettyModelName(m.id);
-        opt.title = m.id;
-        modelSelect.appendChild(opt);
-      });
-      // Preserve the previously active model across reconnects if still available
-      if (prevModel && models.some(m => m.id === prevModel)) {
-        modelSelect.value = prevModel;
-      }
-    }
-    // Track the active model silently (no notification on initial connect/reconnect)
-    state.currentModel = modelSelect.value || null;
+    // Pull in AnythingLLM workspaces (best-effort) before building the picker
+    // so both backends appear together. LM Studio being reachable is what
+    // marks us "connected"; AnythingLLM is additive and never blocks.
+    await refreshAnythingLLM();
+    populateModelDropdown(models);
     await refreshModelMeta();
     refreshModelCaps();
+    updateAnythingStatus();
 
     setStatus('connected');
     updateSendBtn();
@@ -243,6 +247,7 @@ function showSetup() {
   state.messages = [];
   state.apiBase = '';
   state.currentSessionId = null;
+  state.currentBackend = 'lmstudio';
   state.modelCaps.vision = false;
   clearAttachments();
   closeHistory();
@@ -379,12 +384,12 @@ function renderStoredMessage(msg) {
   addUserMessage(text, attachments);
 }
 
-function addModelDivider(modelId) {
+function addModelDivider(text) {
   hideWelcome();
   const divider = document.createElement('div');
   divider.className = 'model-divider';
   const label = document.createElement('span');
-  label.textContent = `${prettyModelName(modelId)} loaded`;
+  label.textContent = text;
   divider.appendChild(label);
   messagesEl.appendChild(divider);
   scrollToBottom();
@@ -392,10 +397,16 @@ function addModelDivider(modelId) {
 
 function onModelChange() {
   const selected = modelSelect.value;
-  if (!selected || selected === state.currentModel) return;
+  const backend = activeBackendKey();
+  if (!selected || (selected === state.currentModel && backend === state.currentBackend)) return;
   state.currentModel = selected;
-  addModelDivider(selected);
+  state.currentBackend = backend;
+  const label = backend === 'anythingllm'
+    ? `${modelSelect.selectedOptions[0]?.textContent} · workspace`
+    : `${prettyModelName(selected)} loaded`;
+  addModelDivider(label);
   refreshModelCaps();
+  saveCurrentSession();
 }
 
 // Best-effort "pretty" display name for a model dropdown entry, e.g.
@@ -473,6 +484,123 @@ function nameSuggestsVision(modelId) {
   return patterns.some(p => id.includes(p));
 }
 
+// === Backends (LM Studio direct + optional AnythingLLM workspaces) ===
+// The active backend is encoded on the selected <option>'s data-backend
+// attribute; the option's value is the raw model id / workspace slug that gets
+// sent as `model`.
+function activeBackendKey() {
+  return modelSelect.selectedOptions[0]?.dataset.backend || 'lmstudio';
+}
+
+function activeModelId() {
+  return modelSelect.value || '';
+}
+
+// URL + headers for a chat/completions call against a given backend. Both
+// LM Studio and AnythingLLM expose an OpenAI-compatible surface, so callers
+// only differ by base URL, endpoint path, and auth header.
+function backendRequest(key) {
+  if (key === 'anythingllm') {
+    return {
+      chatUrl: state.anythingllm.url + '/api/v1/openai/chat/completions',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + state.anythingllm.key,
+      },
+    };
+  }
+  return {
+    chatUrl: state.apiBase + '/v1/chat/completions',
+    headers: { 'Content-Type': 'application/json' },
+  };
+}
+
+// First LM Studio model id in the dropdown — used for side-effect-free calls
+// (like auto-naming) that should always run direct, never through a workspace.
+function firstLmModelId() {
+  for (const opt of modelSelect.options) {
+    if (opt.dataset.backend === 'lmstudio' && opt.value) return opt.value;
+  }
+  return '';
+}
+
+function titleCaseSlug(slug) {
+  return String(slug).split(/[-_]/).filter(Boolean)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
+
+// Best-effort fetch of AnythingLLM workspaces via its OpenAI-compatible
+// /models endpoint (each "model" is a workspace slug). Never throws — a
+// failure just leaves the workspace list empty so LM Studio keeps working.
+async function refreshAnythingLLM() {
+  const { url, key } = state.anythingllm;
+  if (!url || !key) { state.anythingllm.workspaces = []; return; }
+  try {
+    const resp = await fetch(url + '/api/v1/openai/models', {
+      headers: { 'Authorization': 'Bearer ' + key },
+      signal: AbortSignal.timeout(6000),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    state.anythingllm.workspaces = (data.data || []).map(w => ({
+      id: w.id,
+      name: w.name || titleCaseSlug(w.id),
+    }));
+  } catch (e) {
+    state.anythingllm.workspaces = [];
+  }
+}
+
+// (Re)build the model dropdown from LM Studio models plus any AnythingLLM
+// workspaces, preserving the current selection where possible. When no
+// workspaces are configured the LM Studio models are added bare (no optgroup),
+// keeping the direct-only experience visually identical to before.
+function populateModelDropdown(lmModels) {
+  const prevValue = modelSelect.value;
+  const prevBackend = activeBackendKey();
+  const workspaces = state.anythingllm.workspaces || [];
+  const useGroups = workspaces.length > 0;
+
+  modelSelect.innerHTML = '';
+  modelSelect.disabled = false;
+
+  const addOption = (parent, value, label, backend) => {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = label;
+    opt.dataset.backend = backend;
+    opt.title = value;
+    parent.appendChild(opt);
+  };
+
+  if (lmModels.length === 0 && !useGroups) {
+    modelSelect.innerHTML = '<option value="">No models loaded</option>';
+    return;
+  }
+
+  const lmParent = useGroups ? document.createElement('optgroup') : modelSelect;
+  if (useGroups) lmParent.label = 'LM Studio';
+  lmModels.forEach(m => addOption(lmParent, m.id, prettyModelName(m.id), 'lmstudio'));
+  if (useGroups && lmModels.length) modelSelect.appendChild(lmParent);
+
+  if (useGroups) {
+    const wsParent = document.createElement('optgroup');
+    wsParent.label = 'AnythingLLM';
+    workspaces.forEach(w => addOption(wsParent, w.id, w.name, 'anythingllm'));
+    modelSelect.appendChild(wsParent);
+  }
+
+  // Restore the prior selection (matching both value and backend) so a
+  // reconnect / workspace refresh doesn't silently switch the active model.
+  const match = [...modelSelect.options].find(
+    o => o.value === prevValue && o.dataset.backend === prevBackend);
+  if (match) {
+    modelSelect.value = prevValue;
+  }
+  state.currentModel = modelSelect.value || null;
+  state.currentBackend = activeBackendKey();
+}
+
 // Fetch type info ("llm" / "vlm" / ...) for every downloaded model in one shot,
 // via LM Studio's native API. Powers both capability detection and routing.
 async function refreshModelMeta() {
@@ -491,10 +619,10 @@ function modelType(id) {
   return state.modelMeta[id]?.type || (nameSuggestsVision(id) ? 'vlm' : '');
 }
 
-// Detect capabilities of the active model.
+// Detect capabilities of the active model. Vision only applies to LM Studio
+// models (AnythingLLM workspaces are treated as text-only through the shim).
 function refreshModelCaps() {
-  const model = modelSelect.value;
-  const vision = modelType(model) === 'vlm';
+  const vision = activeBackendKey() === 'lmstudio' && modelType(activeModelId()) === 'vlm';
 
   state.modelCaps.vision = vision;
 
@@ -503,6 +631,36 @@ function refreshModelCaps() {
     state.attachments = state.attachments.filter(a => a.kind !== 'image');
     renderAttachments();
     updateSendBtn();
+  }
+}
+
+// Save the AnythingLLM URL + key, then reconnect so its workspaces refresh
+// into the model picker alongside the LM Studio models.
+function applyAnythingLLM() {
+  state.anythingllm.url = normalizeUrl(anythingUrl.value);
+  state.anythingllm.key = anythingKey.value.trim();
+  anythingUrl.value = state.anythingllm.url;
+  saveSettings();
+  const orig = anythingSave.textContent;
+  anythingSave.textContent = 'Refreshing…';
+  anythingSave.disabled = true;
+  Promise.resolve(connect()).finally(() => {
+    anythingSave.textContent = orig;
+    anythingSave.disabled = false;
+    updateAnythingStatus();
+  });
+}
+
+// Small status line under the AnythingLLM fields in Settings.
+function updateAnythingStatus() {
+  if (!anythingStatus) return;
+  const { url, key, workspaces } = state.anythingllm;
+  if (!url || !key) {
+    anythingStatus.textContent = 'Not configured — add a URL and API key to use workspaces.';
+  } else if (workspaces.length) {
+    anythingStatus.textContent = `Connected — ${workspaces.length} workspace${workspaces.length === 1 ? '' : 's'} available in the model picker.`;
+  } else {
+    anythingStatus.textContent = 'Set, but no workspaces loaded. Check the URL, API key, and that CORS allows this site.';
   }
 }
 
@@ -892,10 +1050,12 @@ function regenerate() {
 // Generate an assistant reply for the current state.messages.
 async function generateReply() {
   // Model selection is purely whatever's in the dropdown — no auto-switching.
-  // Show the loading bar whenever that model isn't the one that last actually
-  // produced output, since LM Studio may need to load it fresh.
-  const targetModel = modelSelect.value;
-  const isModelSwitch = !!targetModel && targetModel !== state.lastLoadedModel;
+  const targetModel = activeModelId();
+  const backendKey = activeBackendKey();
+  const backend = backendRequest(backendKey);
+  // The loading bar only makes sense for LM Studio (it may load a model fresh);
+  // AnythingLLM workspaces are always ready, so skip it there.
+  const isModelSwitch = backendKey === 'lmstudio' && !!targetModel && targetModel !== state.lastLoadedModel;
 
   const apiMessages = [];
   const sys = systemPrompt.value.trim();
@@ -954,11 +1114,11 @@ async function generateReply() {
     reasoning ? `<think>${reasoning}</think>${fullContent}` : fullContent;
 
   try {
-    const resp = await fetch(state.apiBase + '/v1/chat/completions', {
+    const resp = await fetch(backend.chatUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: backend.headers,
       body: JSON.stringify({
-        model: modelSelect.value || undefined,
+        model: targetModel || undefined,
         messages: apiMessages,
         temperature: parseFloat(tempSlider.value),
         max_tokens: parseInt(tokensSlider.value),
@@ -1057,6 +1217,11 @@ async function generateReply() {
       } else {
         bubble.innerHTML = '<em>Stopped.</em>';
       }
+    } else if (backendKey === 'anythingllm') {
+      // An AnythingLLM failure is isolated — don't tear down the LM Studio
+      // connection or trigger its reconnect loop. Just surface the error.
+      bubble.className = 'message-content error';
+      bubble.textContent = `AnythingLLM request failed: ${err.message}. Check its URL, API key, and that CORS allows this site.`;
     } else {
       bubble.className = 'message-content error';
       bubble.textContent = err.message;
@@ -1135,12 +1300,16 @@ async function maybeAutoName() {
 
   const userText = extractText(state.messages.find(m => m.role === 'user')?.content || '').slice(0, 400);
   const aiText = extractText(state.messages.find(m => m.role === 'assistant')?.content || '').slice(0, 400);
+  // Always name via LM Studio direct — a cheap one-off that shouldn't spin up a
+  // workspace's retrieval/agent flow. Falls back to the active model only if no
+  // LM Studio model is available.
+  const namingModel = firstLmModelId() || activeModelId();
   try {
     const resp = await fetch(state.apiBase + '/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: modelSelect.value || undefined,
+        model: namingModel || undefined,
         messages: [{ role: 'user', content: `Write a short title (3-5 words) summarizing this conversation. Reply with ONLY the title — no quotes, no punctuation around it, no explanation.\n\nUser: ${userText}\nAssistant: ${aiText}` }],
         temperature: 0.3,
         max_tokens: 400, // headroom for models that think before answering
@@ -1244,6 +1413,7 @@ function saveCurrentSession() {
   session.messages = state.messages;
   if (!session.customTitle && !session.autoNamed) session.title = sessionTitle(state.messages);
   session.model = state.currentModel;
+  session.backend = state.currentBackend;
   session.settings = {
     temperature: parseFloat(tempSlider.value),
     maxTokens: parseInt(tokensSlider.value),
@@ -1264,10 +1434,15 @@ function loadSession(id) {
   state.messages = JSON.parse(JSON.stringify(session.messages || []));
   clearAttachments();
 
-  // Restore the chat's model if it's still loaded in LM Studio
-  if (session.model && [...modelSelect.options].some(o => o.value === session.model)) {
+  // Restore the chat's model + backend if that option still exists (LM Studio
+  // model still loaded, or workspace still available).
+  const wantBackend = session.backend || 'lmstudio';
+  const opt = session.model && [...modelSelect.options].find(
+    o => o.value === session.model && o.dataset.backend === wantBackend);
+  if (opt) {
     modelSelect.value = session.model;
     state.currentModel = session.model;
+    state.currentBackend = wantBackend;
     refreshModelCaps();
   }
   // Restore the chat's settings
@@ -1665,6 +1840,8 @@ function setupListeners() {
     connect();
     closeSidebar();
   });
+
+  if (anythingSave) anythingSave.addEventListener('click', applyAnythingLLM);
 
   disconnectBtn.addEventListener('click', () => {
     closeSidebar();

@@ -10,7 +10,7 @@
   <title>Archivist</title>
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="style.css?v=0.4.4">
+  <link rel="stylesheet" href="style.css?v=0.5.0">
 </head>
 <body>
   <div id="app">
@@ -48,6 +48,14 @@
           <input type="text" id="sidebar-url" placeholder="100.x.x.x:1234" spellcheck="false">
           <button id="sidebar-reconnect" class="btn-sm">Reconnect</button>
           <p class="setting-hint">Connected via Tailscale to your LM Studio</p>
+        </div>
+        <div class="setting-group">
+          <label for="anythingllm-url">AnythingLLM <span class="label-optional">(optional)</span></label>
+          <input type="text" id="anythingllm-url" placeholder="100.x.x.x:3001" spellcheck="false" autocomplete="off">
+          <input type="password" id="anythingllm-key" placeholder="API key" spellcheck="false" autocomplete="off">
+          <button id="anythingllm-save" class="btn-sm">Save &amp; refresh</button>
+          <p class="setting-hint">Adds your workspaces to the model picker for RAG &amp; agents. Pick a workspace from the dropdown to route a chat through it; leave a model selected to talk to LM Studio directly.</p>
+          <p class="setting-hint" id="anythingllm-status"></p>
         </div>
         <div class="setting-group">
           <label for="system-prompt">System Prompt</label>
@@ -173,6 +181,6 @@
   </div>
 
   <script src="marked.min.js"></script>
-  <script src="app.js?v=0.4.4"></script>
+  <script src="app.js?v=0.5.0"></script>
 </body>
 </html>
