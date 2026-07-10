@@ -515,6 +515,12 @@ header::before {
   font-size: 1.1rem;
 }
 
+@supports (-webkit-touch-callout: none) {
+  .welcome-chat p {
+    font-size: 0.95rem;
+  }
+}
+
 /* === Model switch divider === */
 .model-divider {
   display: flex;
