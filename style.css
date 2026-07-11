@@ -86,7 +86,7 @@ body {
 
 @media (min-width: 768px) {
   #app {
-    background-position: center 78px;
+    background-position: center center;
     background-size: 520px auto;
   }
 }
