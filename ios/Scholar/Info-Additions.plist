@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Xcode 15+ project templates store Info.plist keys as "Custom iOS Target
+  Properties" in the target's Info tab rather than a standalone file, so this
+  isn't meant to be built directly. Copy the keys below into that Info tab
+  (or merge them into an Info.plist if your project uses one). See
+  ios/README.md for exact steps.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!--
+    LM Studio / AnythingLLM are reached over plain http:// at a Tailscale IP
+    (e.g. 100.x.x.x:1234), not https. App Transport Security blocks that by
+    default, so it needs an explicit exception. Tailscale addresses aren't
+    on a fixed domain or CIDR range ATS understands, so the practical option
+    is the blanket "allow arbitrary loads" exception rather than a per-domain
+    one — the app already only ever talks to servers you configure yourself.
+  -->
+  <key>NSAppTransportSecurity</key>
+  <dict>
+    <key>NSAllowsArbitraryLoads</key>
+    <true/>
+  </dict>
+
+  <!-- Shown once if the file-attach picker's "Take Photo" option is used. -->
+  <key>NSCameraUsageDescription</key>
+  <string>Scholar can attach a photo you take to a chat message.</string>
+
+  <!-- Shown once if the file-attach picker's photo library option is used. -->
+  <key>NSPhotoLibraryUsageDescription</key>
+  <string>Scholar can attach a photo from your library to a chat message.</string>
+
+  <!--
+    Some iOS versions prompt for "Local Network" access the first time an app
+    opens a socket to another device on the LAN/Tailscale interface. This
+    description is shown on that prompt if it appears.
+  -->
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>Scholar connects to LM Studio running on your computer over Tailscale or your local network.</string>
+</dict>
+</plist>
