@@ -515,6 +515,13 @@ header::before {
   font-size: 1.1rem;
 }
 
+/* Hide line break on mobile to let text flow naturally */
+@media (max-width: 767px) {
+  .welcome-chat br {
+    display: none;
+  }
+}
+
 @supports (-webkit-touch-callout: none) {
   .welcome-chat p {
     font-size: 0.95rem;
