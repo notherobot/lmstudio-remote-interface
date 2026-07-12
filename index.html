@@ -123,7 +123,22 @@
         </select>
       </div>
       <div class="header-right">
-        <span class="app-version header-version"></span>
+        <div class="version-dropdown-wrap">
+          <button id="version-btn" class="app-version header-version" aria-label="Show changelog" title="Click for changelog"></button>
+          <div id="version-dropdown" class="version-dropdown hidden">
+            <div class="version-dropdown-content">
+              <div class="version-header">v0.6.2</div>
+              <ul class="version-list">
+                <li>Transparent tower-mark favicon</li>
+                <li>Welcome message line break on desktop</li>
+                <li>Mobile welcome text reflow</li>
+                <li>Max tokens slider: 64–163840</li>
+                <li>Background centered vertically</li>
+                <li>Smaller welcome on iOS</li>
+              </ul>
+            </div>
+          </div>
+        </div>
         <button id="new-chat-btn" class="icon-btn" aria-label="New chat" title="New chat">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
         </button>

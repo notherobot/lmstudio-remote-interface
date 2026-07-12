@@ -82,6 +82,9 @@ const historyList    = $('#history-list');
 const historyEmpty   = $('#history-empty');
 const historySearch  = $('#history-search');
 const scrollPill     = $('#scroll-pill');
+
+const versionBtn     = $('#version-btn');
+const versionDropdown = $('#version-dropdown');
 const composerEl     = $('.composer');
 
 // === Init ===
@@ -1887,6 +1890,19 @@ function setupListeners() {
   historyOverlay.addEventListener('click', closeHistory);
   historyNew.addEventListener('click', () => { newChat(); if (window.innerWidth < 768) closeHistory(); });
   historySearch.addEventListener('input', renderHistoryList);
+
+  // Version dropdown (desktop only)
+  if (versionBtn) {
+    versionBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      versionDropdown.classList.toggle('hidden');
+    });
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.version-dropdown-wrap')) {
+        versionDropdown.classList.add('hidden');
+      }
+    });
+  }
 
   // Scroll position / pill
   chatContainer.addEventListener('scroll', onChatScroll);
