@@ -1321,6 +1321,10 @@ pre:has(.preview-btn) .copy-btn { right: 72px; }
 .history-pin:hover { color: var(--accent); background: rgba(16,163,127,0.1); }
 .history-pin.pinned { opacity: 1; color: var(--accent); }
 
+@media (hover: none) {
+  .history-pin { opacity: 1; }
+}
+
 /* Inline rename input */
 .history-item-title input {
   width: 100%;
@@ -1388,6 +1392,10 @@ pre:has(.preview-btn) .copy-btn { right: 72px; }
 
 .history-item:hover .history-delete { opacity: 1; }
 .history-delete:hover { color: var(--danger); background: rgba(239,68,68,0.1); }
+
+@media (hover: none) {
+  .history-delete { opacity: 1; }
+}
 
 .history-empty {
   color: var(--text-muted);
