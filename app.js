@@ -20,12 +20,9 @@ const state = {
   sessions: [],          // saved chat sessions
   currentSessionId: null,
   stickToBottom: true,   // auto-scroll only while the user is at the bottom
-  // Optional AnythingLLM backend (Tier 1 hybrid). LM Studio stays the required
-  // backbone; when a URL + key are set, that instance's workspaces are added
-  // to the model picker so a chat can be routed to RAG/agents instead of the
-  // model directly. Talks to AnythingLLM's OpenAI-compatible endpoints, so the
-  // same request/stream shape as LM Studio is reused.
-  anythingllm: { url: '', key: '', workspaces: [] },
+  // AnythingLLM workspaces (auto-discovered on port 3001 of the connected PC).
+  // When available, added to model picker so chats can be routed to RAG/agents.
+  anythingllmWorkspaces: [],
 };
 
 // === DOM ===
@@ -50,10 +47,6 @@ const sidebarOverlay = $('#sidebar-overlay');
 const sidebarClose   = $('#sidebar-close');
 const sidebarUrl     = $('#sidebar-url');
 const sidebarReconn  = $('#sidebar-reconnect');
-const anythingUrl    = $('#anythingllm-url');
-const anythingKey    = $('#anythingllm-key');
-const anythingSave   = $('#anythingllm-save');
-const anythingStatus = $('#anythingllm-status');
 const disconnectBtn  = $('#disconnect-btn');
 const systemPrompt   = $('#system-prompt');
 const tempSlider     = $('#temperature');
@@ -126,10 +119,6 @@ function loadSettings() {
     collapseToggle.checked = s.collapseThinking ?? true;
     tempValue.textContent = tempSlider.value;
     tokensValue.textContent = tokensSlider.value;
-    state.anythingllm.url = s.anythingllmUrl || '';
-    state.anythingllm.key = s.anythingllmKey || '';
-    if (anythingUrl) anythingUrl.value = state.anythingllm.url;
-    if (anythingKey) anythingKey.value = state.anythingllm.key;
   } catch(e) { /* ignore */ }
 }
 
@@ -140,8 +129,6 @@ function saveSettings() {
     maxTokens: parseInt(tokensSlider.value),
     stream: streamToggle.checked,
     collapseThinking: collapseToggle.checked,
-    anythingllmUrl: state.anythingllm.url,
-    anythingllmKey: state.anythingllm.key,
   }));
 }
 
@@ -504,12 +491,10 @@ function activeModelId() {
 // only differ by base URL, endpoint path, and auth header.
 function backendRequest(key) {
   if (key === 'anythingllm') {
+    const anythingllmUrl = state.apiBase.replace(/:\d+$/, ':3001');
     return {
-      chatUrl: state.anythingllm.url + '/api/v1/openai/chat/completions',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + state.anythingllm.key,
-      },
+      chatUrl: anythingllmUrl + '/api/v1/openai/chat/completions',
+      headers: { 'Content-Type': 'application/json' },
     };
   }
   return {
@@ -533,24 +518,23 @@ function titleCaseSlug(slug) {
 }
 
 // Best-effort fetch of AnythingLLM workspaces via its OpenAI-compatible
-// /models endpoint (each "model" is a workspace slug). Never throws — a
+// /models endpoint on port 3001 of the connected PC. Never throws — a
 // failure just leaves the workspace list empty so LM Studio keeps working.
 async function refreshAnythingLLM() {
-  const { url, key } = state.anythingllm;
-  if (!url || !key) { state.anythingllm.workspaces = []; return; }
+  if (!state.apiBase) { state.anythingllmWorkspaces = []; return; }
   try {
-    const resp = await fetch(url + '/api/v1/openai/models', {
-      headers: { 'Authorization': 'Bearer ' + key },
+    const url = state.apiBase.replace(/:\d+$/, ':3001') + '/api/v1/openai/models';
+    const resp = await fetch(url, {
       signal: AbortSignal.timeout(6000),
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const data = await resp.json();
-    state.anythingllm.workspaces = (data.data || []).map(w => ({
+    state.anythingllmWorkspaces = (data.data || []).map(w => ({
       id: w.id,
       name: w.name || titleCaseSlug(w.id),
     }));
   } catch (e) {
-    state.anythingllm.workspaces = [];
+    state.anythingllmWorkspaces = [];
   }
 }
 
@@ -561,7 +545,7 @@ async function refreshAnythingLLM() {
 function populateModelDropdown(lmModels) {
   const prevValue = modelSelect.value;
   const prevBackend = activeBackendKey();
-  const workspaces = state.anythingllm.workspaces || [];
+  const workspaces = state.anythingllmWorkspaces || [];
   const useGroups = workspaces.length > 0;
 
   modelSelect.innerHTML = '';
@@ -639,34 +623,6 @@ function refreshModelCaps() {
 
 // Save the AnythingLLM URL + key, then reconnect so its workspaces refresh
 // into the model picker alongside the LM Studio models.
-function applyAnythingLLM() {
-  state.anythingllm.url = normalizeUrl(anythingUrl.value);
-  state.anythingllm.key = anythingKey.value.trim();
-  anythingUrl.value = state.anythingllm.url;
-  saveSettings();
-  const orig = anythingSave.textContent;
-  anythingSave.textContent = 'Refreshing…';
-  anythingSave.disabled = true;
-  Promise.resolve(connect()).finally(() => {
-    anythingSave.textContent = orig;
-    anythingSave.disabled = false;
-    updateAnythingStatus();
-  });
-}
-
-// Small status line under the AnythingLLM fields in Settings.
-function updateAnythingStatus() {
-  if (!anythingStatus) return;
-  const { url, key, workspaces } = state.anythingllm;
-  if (!url || !key) {
-    anythingStatus.textContent = 'Not configured — add a URL and API key to use workspaces.';
-  } else if (workspaces.length) {
-    anythingStatus.textContent = `Connected — ${workspaces.length} workspace${workspaces.length === 1 ? '' : 's'} available in the model picker.`;
-  } else {
-    anythingStatus.textContent = 'Set, but no workspaces loaded. Check the URL, API key, and that CORS allows this site.';
-  }
-}
-
 function escapeHtml(text) {
   return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
@@ -1843,8 +1799,6 @@ function setupListeners() {
     connect();
     closeSidebar();
   });
-
-  if (anythingSave) anythingSave.addEventListener('click', applyAnythingLLM);
 
   disconnectBtn.addEventListener('click', () => {
     closeSidebar();
