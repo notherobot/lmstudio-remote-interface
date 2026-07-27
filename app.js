@@ -94,7 +94,6 @@ function init() {
   loadSettings();
   loadSessions();
   setupListeners();
-  updateAnythingStatus();
 
   // If we have a saved URL, skip setup and connect
   const savedUrl = localStorage.getItem('lmstudio-server-url');
@@ -167,7 +166,6 @@ async function connect() {
     populateModelDropdown(models);
     await refreshModelMeta();
     refreshModelCaps();
-    updateAnythingStatus();
 
     setStatus('connected');
     updateSendBtn();
