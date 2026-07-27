@@ -502,6 +502,19 @@ header::before {
   margin-top: 8px;
 }
 
+.anythingllm-status-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+.anythingllm-status-line .status {
+  margin: 0;
+}
+
 .setting-group textarea {
   width: 100%;
   background: var(--bg-input);

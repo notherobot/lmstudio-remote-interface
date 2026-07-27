@@ -51,6 +51,13 @@
           <p class="setting-hint">Connected via Tailscale to your LM Studio</p>
         </div>
         <div class="setting-group">
+          <label>AnythingLLM</label>
+          <p class="anythingllm-status-line">
+            <span id="anythingllm-dot" class="status disconnected"></span>
+            <span id="anythingllm-status-text">Checking for AnythingLLM on port 3001…</span>
+          </p>
+        </div>
+        <div class="setting-group">
           <label for="system-prompt">System Prompt</label>
           <textarea id="system-prompt" rows="4" placeholder="You are a helpful assistant."></textarea>
         </div>

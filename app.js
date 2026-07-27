@@ -47,6 +47,8 @@ const sidebarOverlay = $('#sidebar-overlay');
 const sidebarClose   = $('#sidebar-close');
 const sidebarUrl     = $('#sidebar-url');
 const sidebarReconn  = $('#sidebar-reconnect');
+const anythingDot    = $('#anythingllm-dot');
+const anythingStatusText = $('#anythingllm-status-text');
 const disconnectBtn  = $('#disconnect-btn');
 const systemPrompt   = $('#system-prompt');
 const tempSlider     = $('#temperature');
@@ -524,7 +526,11 @@ function titleCaseSlug(slug) {
 // /models endpoint on port 3001 of the connected PC. Never throws — a
 // failure just leaves the workspace list empty so LM Studio keeps working.
 async function refreshAnythingLLM() {
-  if (!state.apiBase) { state.anythingllmWorkspaces = []; return; }
+  if (!state.apiBase) {
+    state.anythingllmWorkspaces = [];
+    updateAnythingLLMStatusUI('Not connected to a server yet.');
+    return;
+  }
   try {
     const baseUrl = state.apiBase.replace(/:\d+$/, '');
     const url = baseUrl + ':3001/api/v1/openai/models';
@@ -537,8 +543,27 @@ async function refreshAnythingLLM() {
       id: w.id,
       name: w.name || titleCaseSlug(w.id),
     }));
+    updateAnythingLLMStatusUI();
   } catch (e) {
     state.anythingllmWorkspaces = [];
+    updateAnythingLLMStatusUI('Not reachable on port 3001 — AnythingLLM may not be running.');
+  }
+}
+
+// Reflects AnythingLLM reachability + workspace count in the Settings sidebar.
+function updateAnythingLLMStatusUI(overrideMessage) {
+  if (!anythingDot || !anythingStatusText) return;
+  const workspaces = state.anythingllmWorkspaces || [];
+  if (overrideMessage) {
+    anythingDot.className = 'status disconnected';
+    anythingStatusText.textContent = overrideMessage;
+  } else if (workspaces.length) {
+    anythingDot.className = 'status connected';
+    const names = workspaces.map(w => w.name).join(', ');
+    anythingStatusText.textContent = `Reached — ${workspaces.length} workspace${workspaces.length === 1 ? '' : 's'} available: ${names}`;
+  } else {
+    anythingDot.className = 'status disconnected';
+    anythingStatusText.textContent = 'Reached on port 3001, but no workspaces found.';
   }
 }
 
