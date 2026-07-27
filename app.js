@@ -1,7 +1,7 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.7.0';
+const APP_VERSION = 'v0.7.1';
 const APP_VERSION_DATE = '2026-07-27';
 
 // === State ===
@@ -25,6 +25,13 @@ const state = {
   // the tool calls itself, so there's no client-side tool loop here.
   mcpEnabled: false,
   mcpServers: 'playwright',  // comma-separated mcp.json server labels
+  // LM Studio API token. Optional in general, but *required* for MCP: LM Studio
+  // only lets API clients touch mcp.json servers when "Require Authentication"
+  // is on and the token carries Integration Access — those servers can reach
+  // the filesystem, so it gates them deliberately. Once auth is enabled every
+  // endpoint needs the token, so it's sent on all requests.
+  // Stored in this browser's localStorage only; never committed.
+  apiToken: '',
   // Server-side conversation id from the last /api/v1/chat response. Lets the
   // next turn continue the same thread instead of re-sending history. Cleared
   // whenever the conversation changes out from under it (new/loaded chat,
@@ -57,6 +64,7 @@ const sidebarReconn  = $('#sidebar-reconnect');
 const mcpToggle      = $('#mcp-toggle');
 const mcpServersInput = $('#mcp-servers');
 const mcpStatusText  = $('#mcp-status-text');
+const apiTokenInput  = $('#api-token');
 const disconnectBtn  = $('#disconnect-btn');
 const systemPrompt   = $('#system-prompt');
 const tempSlider     = $('#temperature');
@@ -131,8 +139,10 @@ function loadSettings() {
     tokensValue.textContent = tokensSlider.value;
     state.mcpEnabled = s.mcpEnabled ?? false;
     state.mcpServers = s.mcpServers ?? 'playwright';
+    state.apiToken = s.apiToken ?? '';
     if (mcpToggle) mcpToggle.checked = state.mcpEnabled;
     if (mcpServersInput) mcpServersInput.value = state.mcpServers;
+    if (apiTokenInput) apiTokenInput.value = state.apiToken;
     updateMcpUI();
   } catch(e) { /* ignore */ }
 }
@@ -146,7 +156,17 @@ function saveSettings() {
     collapseThinking: collapseToggle.checked,
     mcpEnabled: state.mcpEnabled,
     mcpServers: state.mcpServers,
+    apiToken: state.apiToken,
   }));
+}
+
+// LM Studio accepts `Authorization: Bearer <token>` once "Require
+// Authentication" is on — and then every endpoint needs it, not just the
+// MCP ones. Merged into all outgoing requests; a no-op when no token is set.
+function authHeaders(extra) {
+  const h = { ...(extra || {}) };
+  if (state.apiToken) h['Authorization'] = 'Bearer ' + state.apiToken;
+  return h;
 }
 
 // === Connection ===
@@ -169,6 +189,7 @@ async function connect() {
 
   try {
     const resp = await fetch(state.apiBase + '/v1/models', {
+      headers: authHeaders(),
       signal: AbortSignal.timeout(10000),
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -207,6 +228,7 @@ async function tryConnect(rawUrl) {
 
   try {
     const resp = await fetch(base + '/v1/models', {
+      headers: authHeaders(),
       signal: AbortSignal.timeout(10000),
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -629,7 +651,7 @@ function populateModelDropdown(lmModels) {
 // via LM Studio's native API. Powers both capability detection and routing.
 async function refreshModelMeta() {
   try {
-    const resp = await fetch(state.apiBase + '/api/v0/models', { signal: AbortSignal.timeout(4000) });
+    const resp = await fetch(state.apiBase + '/api/v0/models', { headers: authHeaders(), signal: AbortSignal.timeout(4000) });
     if (resp.ok) {
       const data = await resp.json();
       const meta = {};
@@ -1153,7 +1175,7 @@ async function generateReply() {
 
     const resp = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(payload),
       signal: state.abortController.signal,
     });
@@ -1325,10 +1347,18 @@ async function generateReply() {
       // switch MCP off if the tool server is the problem.
       state.mcpResponseId = null;
       bubble.className = 'message-content error';
-      bubble.textContent =
-        `MCP request failed: ${err.message}. Check that the MCP server names in ` +
-        `Settings match your LM Studio mcp.json, and that this LM Studio build ` +
-        `supports /api/v1/chat.`;
+      // A 401/403 here is almost always the token, not the server name — LM
+      // Studio only exposes mcp.json servers to API clients when auth is on
+      // and the token has Integration Access.
+      const isAuth = /HTTP (401|403)/.test(err.message);
+      bubble.textContent = isAuth
+        ? `MCP permission denied. In LM Studio: Developer → Server Settings → ` +
+          `enable "Require Authentication", then Manage Tokens → create a token ` +
+          `with Integration Access, and paste it into Settings → LM Studio API Token. ` +
+          `(${err.message})`
+        : `MCP request failed: ${err.message}. Check that the MCP server names in ` +
+          `Settings match your LM Studio mcp.json, and that this LM Studio build ` +
+          `supports /api/v1/chat.`;
     } else {
       bubble.className = 'message-content error';
       bubble.textContent = err.message;
@@ -1413,7 +1443,7 @@ async function maybeAutoName() {
   try {
     const resp = await fetch(state.apiBase + '/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         model: namingModel || undefined,
         messages: [{ role: 'user', content: `Write a short title (3-5 words) summarizing this conversation. Reply with ONLY the title — no quotes, no punctuation around it, no explanation.\n\nUser: ${userText}\nAssistant: ${aiText}` }],
@@ -1961,6 +1991,12 @@ function setupListeners() {
       state.mcpResponseId = null;
       saveSettings();
       updateMcpUI();
+    });
+  }
+  if (apiTokenInput) {
+    apiTokenInput.addEventListener('input', () => {
+      state.apiToken = apiTokenInput.value.trim();
+      saveSettings();
     });
   }
 
