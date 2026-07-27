@@ -1,7 +1,7 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.7.2';
+const APP_VERSION = 'v0.7.3';
 const APP_VERSION_DATE = '2026-07-27';
 
 // === State ===
@@ -179,10 +179,10 @@ function normalizeUrl(raw) {
   if (!/^https?:\/\//i.test(url)) {
     url = 'https://' + url;
   }
-  // Add default LM Studio port 1234 if no port specified
-  if (!url.match(/:\d+$/)) {
-    url = url + ':1234';
-  }
+  // Whatever port is typed (or omitted) is used as-is. A `tailscale serve`
+  // setup usually maps the bare hostname — port 443 — straight to LM Studio,
+  // so forcing a default port here breaks exactly the setup it was meant to
+  // help. Omitting the port is the common remote case; ":1234" is the local one.
   return url;
 }
 

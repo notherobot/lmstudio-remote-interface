@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/png" href="favicon.png">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="style.css?v=0.7.2">
+  <link rel="stylesheet" href="style.css?v=0.7.3">
 </head>
 <body>
   <div id="app">
@@ -23,9 +23,9 @@
         <p class="setup-sub">Enter your Tailscale IP to connect</p>
 
         <div class="setup-field">
-          <label for="setup-url">Tailscale IP + Port</label>
-          <input type="text" id="setup-url" placeholder="100.x.x.x:1234" autocomplete="off" spellcheck="false" inputmode="url">
-          <p class="setup-hint">Find your PC's Tailscale IP in the Tailscale app or at <a href="https://login.tailscale.com/admin/machines" target="_blank" class="link-btn" style="text-decoration:underline;font-size:inherit">login.tailscale.com</a><br>On the same PC? Use <button type="button" class="link-btn" id="use-localhost">localhost:1234</button></p>
+          <label for="setup-url">Tailscale address</label>
+          <input type="text" id="setup-url" placeholder="my-pc.tailnet.ts.net" autocomplete="off" spellcheck="false" inputmode="url">
+          <p class="setup-hint">Use your machine's <code>.ts.net</code> name if you set up <code>tailscale serve</code>, or an IP with a port like <code>100.x.x.x:1234</code>. Find it in the Tailscale app or at <a href="https://login.tailscale.com/admin/machines" target="_blank" class="link-btn" style="text-decoration:underline;font-size:inherit">login.tailscale.com</a><br>On the same PC? Use <button type="button" class="link-btn" id="use-localhost">localhost:1234</button></p>
         </div>
 
         <div class="setup-field">
@@ -50,8 +50,8 @@
       </div>
       <div class="sidebar-content">
         <div class="setting-group">
-          <label for="sidebar-url">Tailscale IP + Port</label>
-          <input type="text" id="sidebar-url" placeholder="100.x.x.x:1234" spellcheck="false">
+          <label for="sidebar-url">Tailscale address</label>
+          <input type="text" id="sidebar-url" placeholder="my-pc.tailnet.ts.net" spellcheck="false">
           <button id="sidebar-reconnect" class="btn-sm">Reconnect</button>
           <p class="setting-hint">Connected via Tailscale to your LM Studio</p>
         </div>
@@ -139,8 +139,9 @@
           <button id="version-btn" class="app-version header-version" aria-label="Show changelog" title="Click for changelog"></button>
           <div id="version-dropdown" class="version-dropdown hidden">
             <div class="version-dropdown-content">
-              <div class="version-header">v0.7.2</div>
+              <div class="version-header">v0.7.3</div>
               <ul class="version-list">
+                <li>Port no longer forced to 1234</li>
                 <li>API token field on setup screen</li>
                 <li>LM Studio API token support</li>
                 <li>MCP tool support (Playwright, etc.)</li>
@@ -210,6 +211,6 @@
   </div>
 
   <script src="marked.min.js"></script>
-  <script src="app.js?v=0.7.2"></script>
+  <script src="app.js?v=0.7.3"></script>
 </body>
 </html>
