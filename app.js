@@ -491,7 +491,8 @@ function activeModelId() {
 // only differ by base URL, endpoint path, and auth header.
 function backendRequest(key) {
   if (key === 'anythingllm') {
-    const anythingllmUrl = state.apiBase.replace(/:\d+$/, ':3001');
+    const baseUrl = state.apiBase.replace(/:\d+$/, '');
+    const anythingllmUrl = baseUrl + ':3001';
     return {
       chatUrl: anythingllmUrl + '/api/v1/openai/chat/completions',
       headers: { 'Content-Type': 'application/json' },
@@ -523,7 +524,8 @@ function titleCaseSlug(slug) {
 async function refreshAnythingLLM() {
   if (!state.apiBase) { state.anythingllmWorkspaces = []; return; }
   try {
-    const url = state.apiBase.replace(/:\d+$/, ':3001') + '/api/v1/openai/models';
+    const baseUrl = state.apiBase.replace(/:\d+$/, '');
+    const url = baseUrl + ':3001/api/v1/openai/models';
     const resp = await fetch(url, {
       signal: AbortSignal.timeout(6000),
     });
