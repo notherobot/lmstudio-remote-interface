@@ -138,7 +138,7 @@ function normalizeUrl(raw) {
   if (!url) return '';
   url = url.replace(/\/+$/, '');
   if (!/^https?:\/\//i.test(url)) {
-    url = 'http://' + url;
+    url = 'https://' + url;
   }
   return url;
 }
