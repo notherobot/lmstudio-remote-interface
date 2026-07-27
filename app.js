@@ -140,6 +140,10 @@ function normalizeUrl(raw) {
   if (!/^https?:\/\//i.test(url)) {
     url = 'https://' + url;
   }
+  // Add default LM Studio port 1234 if no port specified
+  if (!url.match(/:\d+$/)) {
+    url = url + ':1234';
+  }
   return url;
 }
 
