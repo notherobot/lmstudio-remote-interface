@@ -1,7 +1,7 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.7.1';
+const APP_VERSION = 'v0.7.2';
 const APP_VERSION_DATE = '2026-07-27';
 
 // === State ===
@@ -46,6 +46,7 @@ const setup          = $('#setup');
 const setupUrl       = $('#setup-url');
 const setupConnect   = $('#setup-connect');
 const setupError     = $('#setup-error');
+const setupToken     = $('#setup-token');
 const useLocalhost   = $('#use-localhost');
 
 const headerEl       = $('#header');
@@ -143,6 +144,7 @@ function loadSettings() {
     if (mcpToggle) mcpToggle.checked = state.mcpEnabled;
     if (mcpServersInput) mcpServersInput.value = state.mcpServers;
     if (apiTokenInput) apiTokenInput.value = state.apiToken;
+    if (setupToken) setupToken.value = state.apiToken;
     updateMcpUI();
   } catch(e) { /* ignore */ }
 }
@@ -242,7 +244,15 @@ async function tryConnect(rawUrl) {
     connect();
     return true;
   } catch (err) {
-    showSetupError('Could not connect. Make sure LM Studio\'s server is running, CORS is enabled, and Tailscale is active on both devices.');
+    // Turning on "Require Authentication" in LM Studio makes *every* endpoint
+    // need the token, so a wrong/missing one looks like a total outage.
+    if (/HTTP (401|403)/.test(err.message)) {
+      showSetupError(state.apiToken
+        ? 'Server rejected the API token. Check it is correct and still exists in LM Studio (Developer → Server Settings → Manage Tokens).'
+        : 'This server requires an API token. Create one in LM Studio (Developer → Server Settings → Manage Tokens) and paste it above.');
+    } else {
+      showSetupError('Could not connect. Make sure LM Studio\'s server is running, CORS is enabled, and Tailscale is active on both devices.');
+    }
     return false;
   } finally {
     setupConnect.disabled = false;
@@ -1993,11 +2003,19 @@ function setupListeners() {
       updateMcpUI();
     });
   }
+  // Both token fields (Settings and the setup screen) drive the same value —
+  // the setup one exists so a bad token is still fixable while disconnected,
+  // when Settings is unreachable.
+  const syncToken = (from, to) => {
+    state.apiToken = from.value.trim();
+    if (to) to.value = from.value;
+    saveSettings();
+  };
   if (apiTokenInput) {
-    apiTokenInput.addEventListener('input', () => {
-      state.apiToken = apiTokenInput.value.trim();
-      saveSettings();
-    });
+    apiTokenInput.addEventListener('input', () => syncToken(apiTokenInput, setupToken));
+  }
+  if (setupToken) {
+    setupToken.addEventListener('input', () => syncToken(setupToken, apiTokenInput));
   }
 
   disconnectBtn.addEventListener('click', () => {

@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/png" href="favicon.png">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="style.css?v=0.7.1">
+  <link rel="stylesheet" href="style.css?v=0.7.2">
 </head>
 <body>
   <div id="app">
@@ -26,6 +26,11 @@
           <label for="setup-url">Tailscale IP + Port</label>
           <input type="text" id="setup-url" placeholder="100.x.x.x:1234" autocomplete="off" spellcheck="false" inputmode="url">
           <p class="setup-hint">Find your PC's Tailscale IP in the Tailscale app or at <a href="https://login.tailscale.com/admin/machines" target="_blank" class="link-btn" style="text-decoration:underline;font-size:inherit">login.tailscale.com</a><br>On the same PC? Use <button type="button" class="link-btn" id="use-localhost">localhost:1234</button></p>
+        </div>
+
+        <div class="setup-field">
+          <label for="setup-token">API Token <span class="label-optional">(only if LM Studio requires auth)</span></label>
+          <input type="password" id="setup-token" placeholder="Leave blank if unsure" autocomplete="off" spellcheck="false">
         </div>
 
         <button id="setup-connect" class="btn-connect">Connect</button>
@@ -134,8 +139,9 @@
           <button id="version-btn" class="app-version header-version" aria-label="Show changelog" title="Click for changelog"></button>
           <div id="version-dropdown" class="version-dropdown hidden">
             <div class="version-dropdown-content">
-              <div class="version-header">v0.7.1</div>
+              <div class="version-header">v0.7.2</div>
               <ul class="version-list">
+                <li>API token field on setup screen</li>
                 <li>LM Studio API token support</li>
                 <li>MCP tool support (Playwright, etc.)</li>
                 <li>Live tool-call activity in replies</li>
@@ -204,6 +210,6 @@
   </div>
 
   <script src="marked.min.js"></script>
-  <script src="app.js?v=0.7.1"></script>
+  <script src="app.js?v=0.7.2"></script>
 </body>
 </html>
