@@ -1,7 +1,7 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.7.5';
+const APP_VERSION = 'v0.7.6';
 const APP_VERSION_DATE = '2026-07-27';
 
 // === State ===
@@ -251,7 +251,12 @@ async function tryConnect(rawUrl) {
         ? 'Server rejected the API token. Check it is correct and still exists in LM Studio (Developer → Server Settings → Manage Tokens).'
         : 'This server requires an API token. Create one in LM Studio (Developer → Server Settings → Manage Tokens) and paste it above.');
     } else {
-      showSetupError('Could not connect. Make sure LM Studio\'s server is running, CORS is enabled, and Tailscale is active on both devices.');
+      // Show the resolved URL: it's the fastest way to spot the address being
+      // something other than what was typed (a stale cached build, a stray
+      // port, the wrong scheme) instead of guessing at it.
+      showSetupError(
+        `Could not reach ${base}/v1/models — make sure LM Studio's server is ` +
+        `running there, CORS is enabled, and Tailscale is active on both devices.`);
     }
     return false;
   } finally {
