@@ -1103,6 +1103,11 @@ pre:has(.preview-btn) .copy-btn { right: 72px; }
 .attach-icon:hover { color: var(--text-primary); }
 .attach-icon:active { color: var(--accent); }
 
+.agent-mode-btn.active {
+  color: var(--accent);
+  filter: drop-shadow(0 0 4px var(--accent-glow));
+}
+
 /* === Attachment previews === */
 .attachments {
   display: flex;

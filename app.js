@@ -23,6 +23,10 @@ const state = {
   // AnythingLLM workspaces (auto-discovered on port 3001 of the connected PC).
   // When available, added to model picker so chats can be routed to RAG/agents.
   anythingllmWorkspaces: [],
+  // When on, outgoing messages to an AnythingLLM workspace are prefixed with
+  // "@agent " to start an agentic session (tool use — web search, etc. — if
+  // configured on that workspace). Only relevant while backend === 'anythingllm'.
+  agentMode: false,
 };
 
 // === DOM ===
@@ -67,6 +71,7 @@ const stopBtn        = $('#stop-btn');
 const attachFileBtn  = $('#attach-file-btn');
 const fileInput      = $('#file-input');
 const attachmentsEl  = $('#attachments');
+const agentModeBtn   = $('#agent-mode-btn');
 
 const historyBtn     = $('#history-btn');
 const historyPanel   = $('#history-panel');
@@ -400,6 +405,7 @@ function onModelChange() {
     : `${prettyModelName(selected)} loaded`;
   addModelDivider(label);
   refreshModelCaps();
+  updateAgentModeVisibility();
   saveCurrentSession();
 }
 
@@ -620,6 +626,20 @@ function populateModelDropdown(lmModels) {
   }
   state.currentModel = modelSelect.value || null;
   state.currentBackend = activeBackendKey();
+  updateAgentModeVisibility();
+}
+
+// Shows the Agent mode toggle only while an AnythingLLM workspace is active;
+// turns the mode back off when switching away so it can't silently leak into
+// a plain LM Studio message.
+function updateAgentModeVisibility() {
+  if (!agentModeBtn) return;
+  const isAnythingLLM = activeBackendKey() === 'anythingllm';
+  agentModeBtn.classList.toggle('hidden', !isAnythingLLM);
+  if (!isAnythingLLM && state.agentMode) {
+    state.agentMode = false;
+    agentModeBtn.classList.remove('active');
+  }
 }
 
 // Fetch type info ("llm" / "vlm" / ...) for every downloaded model in one shot,
@@ -1003,9 +1023,16 @@ function onChatScroll() {
 }
 
 async function sendMessage() {
-  const text = userInput.value.trim();
+  let text = userInput.value.trim();
   const attachments = state.attachments;
   if ((!text && attachments.length === 0) || !state.connected || state.streaming) return;
+
+  // Agent mode prefixes the message with "@agent" so AnythingLLM starts an
+  // agentic session (tool use — web search, etc. — if configured on that
+  // workspace) instead of a plain RAG/chat reply.
+  if (state.agentMode && activeBackendKey() === 'anythingllm' && text && !/^@agent\b/i.test(text)) {
+    text = '@agent ' + text;
+  }
 
   // Large combined attachments make prompt processing take minutes on local
   // models — warn before sending so a "hang" isn't a surprise.
@@ -1863,6 +1890,13 @@ function setupListeners() {
   // their native "Take Photo / Photo Library / Browse Files" sheet.
   attachFileBtn.addEventListener('click', () => fileInput.click());
   fileInput.addEventListener('change', e => { handleAttachedFiles([...e.target.files]); e.target.value = ''; });
+
+  if (agentModeBtn) {
+    agentModeBtn.addEventListener('click', () => {
+      state.agentMode = !state.agentMode;
+      agentModeBtn.classList.toggle('active', state.agentMode);
+    });
+  }
   userInput.addEventListener('paste', e => {
     if (!state.modelCaps.vision) return;
     const imgs = [...(e.clipboardData?.items || [])]
