@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/png" href="favicon.png">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="style.css?v=0.7.4">
+  <link rel="stylesheet" href="style.css?v=0.7.5">
 </head>
 <body>
   <div id="app">
@@ -30,7 +30,10 @@
 
         <div class="setup-field">
           <label for="setup-token">API Token <span class="label-optional">(only if LM Studio requires auth)</span></label>
-          <input type="password" id="setup-token" placeholder="Leave blank if unsure" autocomplete="off" spellcheck="false">
+          <div class="token-wrap">
+            <input type="password" id="setup-token" placeholder="Leave blank if unsure" autocomplete="off" spellcheck="false">
+            <button type="button" class="token-reveal" data-token-for="setup-token" aria-label="Show token">Show</button>
+          </div>
         </div>
 
         <button id="setup-connect" class="btn-connect">Connect</button>
@@ -57,7 +60,10 @@
         </div>
         <div class="setting-group">
           <label for="api-token">LM Studio API Token <span class="label-optional">(required for MCP)</span></label>
-          <input type="password" id="api-token" placeholder="Paste token" spellcheck="false" autocomplete="off">
+          <div class="token-wrap">
+            <input type="password" id="api-token" placeholder="Paste token" spellcheck="false" autocomplete="off">
+            <button type="button" class="token-reveal" data-token-for="api-token" aria-label="Show token">Show</button>
+          </div>
           <p class="setting-hint">In LM Studio: <strong>Developer → Server Settings</strong> → turn on <em>Require Authentication</em>, then <em>Manage Tokens</em> → create a token with <strong>Integration Access</strong>. Saved on this device only.</p>
         </div>
         <div class="setting-group">
@@ -139,8 +145,9 @@
           <button id="version-btn" class="app-version header-version" aria-label="Show changelog" title="Click for changelog"></button>
           <div id="version-dropdown" class="version-dropdown hidden">
             <div class="version-dropdown-content">
-              <div class="version-header">v0.7.4</div>
+              <div class="version-header">v0.7.5</div>
               <ul class="version-list">
+                <li>Show/Hide toggle on token fields</li>
                 <li>Port no longer forced to 1234</li>
                 <li>API token field on setup screen</li>
                 <li>LM Studio API token support</li>
@@ -211,6 +218,6 @@
   </div>
 
   <script src="marked.min.js"></script>
-  <script src="app.js?v=0.7.4"></script>
+  <script src="app.js?v=0.7.5"></script>
 </body>
 </html>

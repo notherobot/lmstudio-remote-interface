@@ -1,7 +1,7 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.7.4';
+const APP_VERSION = 'v0.7.5';
 const APP_VERSION_DATE = '2026-07-27';
 
 // === State ===
@@ -2017,6 +2017,21 @@ function setupListeners() {
   if (setupToken) {
     setupToken.addEventListener('input', () => syncToken(setupToken, apiTokenInput));
   }
+
+  // "Show" reveals the token so it can be checked against LM Studio. Each
+  // button names its field via data-token-for; the two fields toggle
+  // independently since only one is on screen at a time.
+  document.querySelectorAll('.token-reveal').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const field = $('#' + btn.dataset.tokenFor);
+      if (!field) return;
+      const show = field.type === 'password';
+      field.type = show ? 'text' : 'password';
+      btn.textContent = show ? 'Hide' : 'Show';
+      btn.setAttribute('aria-label', show ? 'Hide token' : 'Show token');
+      btn.classList.toggle('revealed', show);
+    });
+  });
 
   disconnectBtn.addEventListener('click', () => {
     closeSidebar();
