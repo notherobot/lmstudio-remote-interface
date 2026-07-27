@@ -1,7 +1,7 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.7.3';
+const APP_VERSION = 'v0.7.4';
 const APP_VERSION_DATE = '2026-07-27';
 
 // === State ===

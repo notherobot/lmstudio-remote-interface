@@ -146,7 +146,8 @@ body {
   margin-bottom: 6px;
 }
 
-.setup-field input[type="text"] {
+.setup-field input[type="text"],
+.setup-field input[type="password"] {
   width: 100%;
   background: var(--bg-input);
   border: 1px solid var(--border);
