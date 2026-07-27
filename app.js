@@ -22,9 +22,7 @@ const state = {
   stickToBottom: true,   // auto-scroll only while the user is at the bottom
   // AnythingLLM workspaces (auto-discovered on port 3001 of the connected PC).
   // When available, added to model picker so chats can be routed to RAG/agents.
-  // The API key is optional — only needed if AnythingLLM has auth enabled.
   anythingllmWorkspaces: [],
-  anythingllmKey: '',
 };
 
 // === DOM ===
@@ -51,8 +49,6 @@ const sidebarUrl     = $('#sidebar-url');
 const sidebarReconn  = $('#sidebar-reconnect');
 const anythingDot    = $('#anythingllm-dot');
 const anythingStatusText = $('#anythingllm-status-text');
-const anythingKey    = $('#anythingllm-key');
-const anythingSave   = $('#anythingllm-save');
 const disconnectBtn  = $('#disconnect-btn');
 const systemPrompt   = $('#system-prompt');
 const tempSlider     = $('#temperature');
@@ -124,8 +120,6 @@ function loadSettings() {
     collapseToggle.checked = s.collapseThinking ?? true;
     tempValue.textContent = tempSlider.value;
     tokensValue.textContent = tokensSlider.value;
-    state.anythingllmKey = s.anythingllmKey || '';
-    if (anythingKey) anythingKey.value = state.anythingllmKey;
   } catch(e) { /* ignore */ }
 }
 
@@ -136,7 +130,6 @@ function saveSettings() {
     maxTokens: parseInt(tokensSlider.value),
     stream: streamToggle.checked,
     collapseThinking: collapseToggle.checked,
-    anythingllmKey: state.anythingllmKey,
   }));
 }
 
@@ -504,11 +497,9 @@ function backendRequest(key) {
   if (key === 'anythingllm') {
     const baseUrl = state.apiBase.replace(/:\d+$/, '');
     const anythingllmUrl = baseUrl + ':3001';
-    const headers = { 'Content-Type': 'application/json' };
-    if (state.anythingllmKey) headers['Authorization'] = 'Bearer ' + state.anythingllmKey;
     return {
       chatUrl: anythingllmUrl + '/api/v1/openai/chat/completions',
-      headers,
+      headers: { 'Content-Type': 'application/json' },
     };
   }
   return {
@@ -543,15 +534,12 @@ async function refreshAnythingLLM() {
   try {
     const baseUrl = state.apiBase.replace(/:\d+$/, '');
     const url = baseUrl + ':3001/api/v1/openai/models';
-    const headers = {};
-    if (state.anythingllmKey) headers['Authorization'] = 'Bearer ' + state.anythingllmKey;
     const resp = await fetch(url, {
-      headers,
       signal: AbortSignal.timeout(6000),
     });
     if (resp.status === 401 || resp.status === 403) {
       state.anythingllmWorkspaces = [];
-      updateAnythingLLMStatusUI('Reached, but rejected — check the API key.');
+      updateAnythingLLMStatusUI('Reached, but rejected — AnythingLLM requires auth.');
       return;
     }
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -1845,20 +1833,6 @@ function setupListeners() {
     connect();
     closeSidebar();
   });
-
-  if (anythingSave) {
-    anythingSave.addEventListener('click', () => {
-      state.anythingllmKey = anythingKey.value.trim();
-      saveSettings();
-      const orig = anythingSave.textContent;
-      anythingSave.textContent = 'Refreshing…';
-      anythingSave.disabled = true;
-      Promise.resolve(connect()).finally(() => {
-        anythingSave.textContent = orig;
-        anythingSave.disabled = false;
-      });
-    });
-  }
 
   disconnectBtn.addEventListener('click', () => {
     closeSidebar();
