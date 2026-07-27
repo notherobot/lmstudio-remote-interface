@@ -1,7 +1,7 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.6.3';
+const APP_VERSION = 'v0.7.0';
 const APP_VERSION_DATE = '2026-07-27';
 
 // === State ===
@@ -12,7 +12,6 @@ const state = {
   streaming: false,
   abortController: null,
   currentModel: null,
-  currentBackend: 'lmstudio', // 'lmstudio' (direct) or 'anythingllm' (workspace)
   modelCaps: { vision: false },
   modelMeta: {},          // { [modelId]: { type: 'llm'|'vlm'|... } } from /api/v0/models
   lastLoadedModel: null,  // model that last actually produced output — drives the loading bar
@@ -20,16 +19,17 @@ const state = {
   sessions: [],          // saved chat sessions
   currentSessionId: null,
   stickToBottom: true,   // auto-scroll only while the user is at the bottom
-  // AnythingLLM workspaces (auto-discovered on port 3001 of the connected PC).
-  // When available, added to model picker so chats can be routed to RAG/agents.
-  // The API key is optional — only needed if AnythingLLM has auth enabled.
-  // It's persisted to localStorage only, never committed to the repo.
-  anythingllmWorkspaces: [],
-  anythingllmKey: '',
-  // When on, outgoing messages to an AnythingLLM workspace are prefixed with
-  // "@agent " to start an agentic session (tool use — web search, etc. — if
-  // configured on that workspace). Only relevant while backend === 'anythingllm'.
-  agentMode: false,
+  // MCP tool use. When enabled, chats route through LM Studio's native
+  // /api/v1/chat endpoint (instead of the OpenAI-compatible one) with the
+  // configured MCP servers attached as "plugin" integrations. LM Studio runs
+  // the tool calls itself, so there's no client-side tool loop here.
+  mcpEnabled: false,
+  mcpServers: 'playwright',  // comma-separated mcp.json server labels
+  // Server-side conversation id from the last /api/v1/chat response. Lets the
+  // next turn continue the same thread instead of re-sending history. Cleared
+  // whenever the conversation changes out from under it (new/loaded chat,
+  // regenerate), which falls back to sending flattened history.
+  mcpResponseId: null,
 };
 
 // === DOM ===
@@ -54,10 +54,9 @@ const sidebarOverlay = $('#sidebar-overlay');
 const sidebarClose   = $('#sidebar-close');
 const sidebarUrl     = $('#sidebar-url');
 const sidebarReconn  = $('#sidebar-reconnect');
-const anythingDot    = $('#anythingllm-dot');
-const anythingStatusText = $('#anythingllm-status-text');
-const anythingKey    = $('#anythingllm-key');
-const anythingSave   = $('#anythingllm-save');
+const mcpToggle      = $('#mcp-toggle');
+const mcpServersInput = $('#mcp-servers');
+const mcpStatusText  = $('#mcp-status-text');
 const disconnectBtn  = $('#disconnect-btn');
 const systemPrompt   = $('#system-prompt');
 const tempSlider     = $('#temperature');
@@ -76,7 +75,7 @@ const stopBtn        = $('#stop-btn');
 const attachFileBtn  = $('#attach-file-btn');
 const fileInput      = $('#file-input');
 const attachmentsEl  = $('#attachments');
-const agentModeBtn   = $('#agent-mode-btn');
+const mcpIndicator   = $('#mcp-indicator');
 
 const historyBtn     = $('#history-btn');
 const historyPanel   = $('#history-panel');
@@ -130,8 +129,11 @@ function loadSettings() {
     collapseToggle.checked = s.collapseThinking ?? true;
     tempValue.textContent = tempSlider.value;
     tokensValue.textContent = tokensSlider.value;
-    state.anythingllmKey = s.anythingllmKey || '';
-    if (anythingKey) anythingKey.value = state.anythingllmKey;
+    state.mcpEnabled = s.mcpEnabled ?? false;
+    state.mcpServers = s.mcpServers ?? 'playwright';
+    if (mcpToggle) mcpToggle.checked = state.mcpEnabled;
+    if (mcpServersInput) mcpServersInput.value = state.mcpServers;
+    updateMcpUI();
   } catch(e) { /* ignore */ }
 }
 
@@ -142,7 +144,8 @@ function saveSettings() {
     maxTokens: parseInt(tokensSlider.value),
     stream: streamToggle.checked,
     collapseThinking: collapseToggle.checked,
-    anythingllmKey: state.anythingllmKey,
+    mcpEnabled: state.mcpEnabled,
+    mcpServers: state.mcpServers,
   }));
 }
 
@@ -174,10 +177,6 @@ async function connect() {
     state.connected = true;
 
     const models = data.data || [];
-    // Pull in AnythingLLM workspaces (best-effort) before building the picker
-    // so both backends appear together. LM Studio being reachable is what
-    // marks us "connected"; AnythingLLM is additive and never blocks.
-    await refreshAnythingLLM();
     populateModelDropdown(models);
     await refreshModelMeta();
     refreshModelCaps();
@@ -254,7 +253,7 @@ function showSetup() {
   state.messages = [];
   state.apiBase = '';
   state.currentSessionId = null;
-  state.currentBackend = 'lmstudio';
+  state.mcpResponseId = null;
   state.modelCaps.vision = false;
   clearAttachments();
   closeHistory();
@@ -404,16 +403,13 @@ function addModelDivider(text) {
 
 function onModelChange() {
   const selected = modelSelect.value;
-  const backend = activeBackendKey();
-  if (!selected || (selected === state.currentModel && backend === state.currentBackend)) return;
+  if (!selected || selected === state.currentModel) return;
   state.currentModel = selected;
-  state.currentBackend = backend;
-  const label = backend === 'anythingllm'
-    ? `${modelSelect.selectedOptions[0]?.textContent} · workspace`
-    : `${prettyModelName(selected)} loaded`;
-  addModelDivider(label);
+  // Switching models invalidates the server-side MCP thread — the next turn
+  // has to re-send history rather than continue one built on the old model.
+  state.mcpResponseId = null;
+  addModelDivider(`${prettyModelName(selected)} loaded`);
   refreshModelCaps();
-  updateAgentModeVisibility();
   saveCurrentSession();
 }
 
@@ -492,45 +488,108 @@ function nameSuggestsVision(modelId) {
   return patterns.some(p => id.includes(p));
 }
 
-// === Backends (LM Studio direct + optional AnythingLLM workspaces) ===
-// The active backend is encoded on the selected <option>'s data-backend
-// attribute; the option's value is the raw model id / workspace slug that gets
-// sent as `model`.
-function activeBackendKey() {
-  return modelSelect.selectedOptions[0]?.dataset.backend || 'lmstudio';
-}
-
 function activeModelId() {
   return modelSelect.value || '';
 }
 
-// URL + headers for a chat/completions call against a given backend. Both
-// LM Studio and AnythingLLM expose an OpenAI-compatible surface, so callers
-// only differ by base URL, endpoint path, and auth header.
-function backendRequest(key) {
-  if (key === 'anythingllm') {
-    const baseUrl = state.apiBase.replace(/:\d+$/, '');
-    const anythingllmUrl = baseUrl + ':3001';
-    const headers = { 'Content-Type': 'application/json' };
-    if (state.anythingllmKey) headers['Authorization'] = 'Bearer ' + state.anythingllmKey;
-    return {
-      chatUrl: anythingllmUrl + '/api/v1/openai/chat/completions',
-      headers,
-    };
-  }
-  return {
-    chatUrl: state.apiBase + '/v1/chat/completions',
-    headers: { 'Content-Type': 'application/json' },
-  };
+// === MCP (Model Context Protocol) ===
+// LM Studio exposes MCP servers configured in its mcp.json as "plugin"
+// integrations on its native /api/v1/chat endpoint. That endpoint speaks a
+// different dialect than the OpenAI-compatible one Scholar uses by default
+// (named SSE events, `input` instead of `messages`, server-side threading),
+// so MCP chats take a separate request/parse path — see generateReply.
+//
+// LM Studio executes the tool calls itself and streams the results back, so
+// there's no client-side tool-execution loop to implement here.
+
+// Parses the comma-separated server list into `integrations` entries.
+// "playwright, fetch" -> [{type:'plugin', id:'mcp/playwright'}, ...]
+function mcpIntegrations() {
+  return String(state.mcpServers || '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(label => ({
+      type: 'plugin',
+      id: label.startsWith('mcp/') ? label : 'mcp/' + label,
+    }));
 }
 
-// First LM Studio model id in the dropdown — used for side-effect-free calls
-// (like auto-naming) that should always run direct, never through a workspace.
-function firstLmModelId() {
-  for (const opt of modelSelect.options) {
-    if (opt.dataset.backend === 'lmstudio' && opt.value) return opt.value;
+// MCP is only actually in play when it's switched on AND at least one server
+// is named — otherwise fall back to the plain OpenAI-compatible path.
+function mcpActive() {
+  return state.mcpEnabled && mcpIntegrations().length > 0;
+}
+
+// Reflects MCP state in the Settings panel and the header pill.
+function updateMcpUI() {
+  if (mcpServersInput) mcpServersInput.disabled = !state.mcpEnabled;
+  if (mcpIndicator) mcpIndicator.classList.toggle('hidden', !mcpActive());
+  if (mcpStatusText) {
+    const names = mcpIntegrations().map(i => i.id.replace(/^mcp\//, ''));
+    if (!state.mcpEnabled) {
+      mcpStatusText.textContent = 'Off — chats use the standard endpoint.';
+    } else if (!names.length) {
+      mcpStatusText.textContent = 'On, but no servers listed — add one above.';
+    } else {
+      mcpStatusText.textContent = `Active: ${names.join(', ')}. Tool calls run inside LM Studio.`;
+    }
+  }
+}
+
+// Flattens a stored message's content (string, or OpenAI content-parts array)
+// down to plain text. Used when replaying history into the native endpoint,
+// which takes a single `input` rather than a role-tagged message array.
+function messageToText(content) {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content.filter(p => p.type === 'text').map(p => p.text).join('\n');
   }
   return '';
+}
+
+// Builds the POST /api/v1/chat body.
+//
+// That endpoint is stateful: it stores the thread and hands back a
+// response_id. When we hold one, only the newest user message is sent and
+// LM Studio supplies the prior context. Otherwise (first turn of a chat, a
+// chat restored from localStorage, or after a regenerate/model switch
+// invalidated the thread) the conversation so far is replayed as one
+// transcript so the model still has context.
+function mcpChatBody({ targetModel, sys, useStream }) {
+  const last = state.messages[state.messages.length - 1];
+  const continuing = !!state.mcpResponseId;
+
+  let text;
+  if (continuing) {
+    text = messageToText(last?.content);
+  } else {
+    text = state.messages
+      .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${messageToText(m.content)}`)
+      .join('\n\n');
+  }
+
+  // Images ride along as separate input parts; text-only stays a plain string.
+  const images = Array.isArray(last?.content)
+    ? last.content.filter(p => p.type === 'image_url' && p.image_url?.url)
+    : [];
+  const input = images.length
+    ? [{ type: 'text', content: text },
+       ...images.map(p => ({ type: 'image', data_url: p.image_url.url }))]
+    : text;
+
+  const body = {
+    model: targetModel || undefined,
+    input,
+    integrations: mcpIntegrations(),
+    max_output_tokens: parseInt(tokensSlider.value),
+    stream: useStream,
+    // This endpoint caps temperature at 1, unlike the 0-2 the slider allows.
+    temperature: Math.min(parseFloat(tempSlider.value), 1),
+  };
+  if (sys) body.system_prompt = sys;
+  if (continuing) body.previous_response_id = state.mcpResponseId;
+  return body;
 }
 
 function titleCaseSlug(slug) {
@@ -538,121 +597,32 @@ function titleCaseSlug(slug) {
     .map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
 
-// Best-effort fetch of AnythingLLM workspaces via its OpenAI-compatible
-// /models endpoint on port 3001 of the connected PC. Never throws — a
-// failure just leaves the workspace list empty so LM Studio keeps working.
-async function refreshAnythingLLM() {
-  if (!state.apiBase) {
-    state.anythingllmWorkspaces = [];
-    updateAnythingLLMStatusUI('Not connected to a server yet.');
-    return;
-  }
-  try {
-    const baseUrl = state.apiBase.replace(/:\d+$/, '');
-    const url = baseUrl + ':3001/api/v1/openai/models';
-    const headers = {};
-    if (state.anythingllmKey) headers['Authorization'] = 'Bearer ' + state.anythingllmKey;
-    const resp = await fetch(url, {
-      headers,
-      signal: AbortSignal.timeout(6000),
-    });
-    if (resp.status === 401 || resp.status === 403) {
-      state.anythingllmWorkspaces = [];
-      updateAnythingLLMStatusUI('Reached, but rejected — check the API key.');
-      return;
-    }
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = await resp.json();
-    state.anythingllmWorkspaces = (data.data || []).map(w => ({
-      id: w.id,
-      name: w.name || titleCaseSlug(w.id),
-    }));
-    updateAnythingLLMStatusUI();
-  } catch (e) {
-    state.anythingllmWorkspaces = [];
-    updateAnythingLLMStatusUI('Not reachable on port 3001 — AnythingLLM may not be running.');
-  }
-}
-
-// Reflects AnythingLLM reachability + workspace count in the Settings sidebar.
-function updateAnythingLLMStatusUI(overrideMessage) {
-  if (!anythingDot || !anythingStatusText) return;
-  const workspaces = state.anythingllmWorkspaces || [];
-  if (overrideMessage) {
-    anythingDot.className = 'status disconnected';
-    anythingStatusText.textContent = overrideMessage;
-  } else if (workspaces.length) {
-    anythingDot.className = 'status connected';
-    const names = workspaces.map(w => w.name).join(', ');
-    anythingStatusText.textContent = `Reached — ${workspaces.length} workspace${workspaces.length === 1 ? '' : 's'} available: ${names}`;
-  } else {
-    anythingDot.className = 'status disconnected';
-    anythingStatusText.textContent = 'Reached on port 3001, but no workspaces found.';
-  }
-}
-
-// (Re)build the model dropdown from LM Studio models plus any AnythingLLM
-// workspaces, preserving the current selection where possible. When no
-// workspaces are configured the LM Studio models are added bare (no optgroup),
-// keeping the direct-only experience visually identical to before.
+// (Re)build the model dropdown from the models LM Studio reports, preserving
+// the current selection where possible so a reconnect doesn't silently switch
+// the active model.
 function populateModelDropdown(lmModels) {
   const prevValue = modelSelect.value;
-  const prevBackend = activeBackendKey();
-  const workspaces = state.anythingllmWorkspaces || [];
-  const useGroups = workspaces.length > 0;
 
   modelSelect.innerHTML = '';
   modelSelect.disabled = false;
 
-  const addOption = (parent, value, label, backend) => {
-    const opt = document.createElement('option');
-    opt.value = value;
-    opt.textContent = label;
-    opt.dataset.backend = backend;
-    opt.title = value;
-    parent.appendChild(opt);
-  };
-
-  if (lmModels.length === 0 && !useGroups) {
+  if (lmModels.length === 0) {
     modelSelect.innerHTML = '<option value="">No models loaded</option>';
     return;
   }
 
-  const lmParent = useGroups ? document.createElement('optgroup') : modelSelect;
-  if (useGroups) lmParent.label = 'LM Studio';
-  lmModels.forEach(m => addOption(lmParent, m.id, prettyModelName(m.id), 'lmstudio'));
-  if (useGroups && lmModels.length) modelSelect.appendChild(lmParent);
+  lmModels.forEach(m => {
+    const opt = document.createElement('option');
+    opt.value = m.id;
+    opt.textContent = prettyModelName(m.id);
+    opt.title = m.id;
+    modelSelect.appendChild(opt);
+  });
 
-  if (useGroups) {
-    const wsParent = document.createElement('optgroup');
-    wsParent.label = 'AnythingLLM';
-    workspaces.forEach(w => addOption(wsParent, w.id, w.name, 'anythingllm'));
-    modelSelect.appendChild(wsParent);
-  }
-
-  // Restore the prior selection (matching both value and backend) so a
-  // reconnect / workspace refresh doesn't silently switch the active model.
-  const match = [...modelSelect.options].find(
-    o => o.value === prevValue && o.dataset.backend === prevBackend);
-  if (match) {
+  if ([...modelSelect.options].some(o => o.value === prevValue)) {
     modelSelect.value = prevValue;
   }
   state.currentModel = modelSelect.value || null;
-  state.currentBackend = activeBackendKey();
-  updateAgentModeVisibility();
-}
-
-// Shows the Agent mode toggle only while an AnythingLLM workspace is active;
-// turns the mode back off when switching away so it can't silently leak into
-// a plain LM Studio message.
-function updateAgentModeVisibility() {
-  if (!agentModeBtn) return;
-  const isAnythingLLM = activeBackendKey() === 'anythingllm';
-  agentModeBtn.classList.toggle('hidden', !isAnythingLLM);
-  if (!isAnythingLLM && state.agentMode) {
-    state.agentMode = false;
-    agentModeBtn.classList.remove('active');
-  }
 }
 
 // Fetch type info ("llm" / "vlm" / ...) for every downloaded model in one shot,
@@ -673,10 +643,9 @@ function modelType(id) {
   return state.modelMeta[id]?.type || (nameSuggestsVision(id) ? 'vlm' : '');
 }
 
-// Detect capabilities of the active model. Vision only applies to LM Studio
-// models (AnythingLLM workspaces are treated as text-only through the shim).
+// Detect capabilities of the active model.
 function refreshModelCaps() {
-  const vision = activeBackendKey() === 'lmstudio' && modelType(activeModelId()) === 'vlm';
+  const vision = modelType(activeModelId()) === 'vlm';
 
   state.modelCaps.vision = vision;
 
@@ -688,8 +657,6 @@ function refreshModelCaps() {
   }
 }
 
-// Save the AnythingLLM URL + key, then reconnect so its workspaces refresh
-// into the model picker alongside the LM Studio models.
 function escapeHtml(text) {
   return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
@@ -1036,16 +1003,9 @@ function onChatScroll() {
 }
 
 async function sendMessage() {
-  let text = userInput.value.trim();
+  const text = userInput.value.trim();
   const attachments = state.attachments;
   if ((!text && attachments.length === 0) || !state.connected || state.streaming) return;
-
-  // Agent mode prefixes the message with "@agent" so AnythingLLM starts an
-  // agentic session (tool use — web search, etc. — if configured on that
-  // workspace) instead of a plain RAG/chat reply.
-  if (state.agentMode && activeBackendKey() === 'anythingllm' && text && !/^@agent\b/i.test(text)) {
-    text = '@agent ' + text;
-  }
 
   // Large combined attachments make prompt processing take minutes on local
   // models — warn before sending so a "hang" isn't a surprise.
@@ -1076,6 +1036,9 @@ function regenerate() {
   }
   const wraps = messagesEl.querySelectorAll('.message.assistant');
   if (wraps.length) wraps[wraps.length - 1].remove();
+  // The server-side MCP thread already contains the reply we just dropped, so
+  // it can't be continued — fall back to re-sending history for this turn.
+  state.mcpResponseId = null;
   saveCurrentSession();
   generateReply();
 }
@@ -1084,11 +1047,8 @@ function regenerate() {
 async function generateReply() {
   // Model selection is purely whatever's in the dropdown — no auto-switching.
   const targetModel = activeModelId();
-  const backendKey = activeBackendKey();
-  const backend = backendRequest(backendKey);
-  // The loading bar only makes sense for LM Studio (it may load a model fresh);
-  // AnythingLLM workspaces are always ready, so skip it there.
-  const isModelSwitch = backendKey === 'lmstudio' && !!targetModel && targetModel !== state.lastLoadedModel;
+  const useMcp = mcpActive();
+  const isModelSwitch = !!targetModel && targetModel !== state.lastLoadedModel;
 
   const apiMessages = [];
   const sys = systemPrompt.value.trim();
@@ -1146,17 +1106,55 @@ async function generateReply() {
   const withReasoning = () =>
     reasoning ? `<think>${reasoning}</think>${fullContent}` : fullContent;
 
+  // Live list of MCP tool calls for this reply, rendered above the text.
+  const toolsEl = document.createElement('div');
+  toolsEl.className = 'tool-calls hidden';
+  body.insertBefore(toolsEl, bubble);
+  const toolNodes = new Map();
+  const addToolCall = (name, provider) => {
+    toolsEl.classList.remove('hidden');
+    const el = document.createElement('div');
+    el.className = 'tool-call running';
+    el.innerHTML =
+      `<span class="tool-call-spinner"></span>` +
+      `<span class="tool-call-name">${escapeHtml(name)}</span>` +
+      (provider ? `<span class="tool-call-src">${escapeHtml(provider)}</span>` : '');
+    toolsEl.appendChild(el);
+    toolNodes.set(name, el);
+    scrollToBottom();
+    return el;
+  };
+  const finishToolCall = (name, ok) => {
+    // Fall back to the most recent still-running call when the end event
+    // doesn't name the tool.
+    const el = toolNodes.get(name) || [...toolsEl.querySelectorAll('.tool-call.running')].pop();
+    if (!el) return;
+    el.classList.remove('running');
+    el.classList.add(ok ? 'done' : 'failed');
+    const spinner = el.querySelector('.tool-call-spinner');
+    if (spinner) spinner.textContent = ok ? '✓' : '✕';
+  };
+
   try {
-    const resp = await fetch(backend.chatUrl, {
+    const url = useMcp
+      ? state.apiBase + '/api/v1/chat'
+      : state.apiBase + '/v1/chat/completions';
+
+    // The two endpoints take different request shapes — see mcpChatBody.
+    const payload = useMcp
+      ? mcpChatBody({ targetModel, sys, useStream })
+      : {
+          model: targetModel || undefined,
+          messages: apiMessages,
+          temperature: parseFloat(tempSlider.value),
+          max_tokens: parseInt(tokensSlider.value),
+          stream: useStream,
+        };
+
+    const resp = await fetch(url, {
       method: 'POST',
-      headers: backend.headers,
-      body: JSON.stringify({
-        model: targetModel || undefined,
-        messages: apiMessages,
-        temperature: parseFloat(tempSlider.value),
-        max_tokens: parseInt(tokensSlider.value),
-        stream: useStream,
-      }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
       signal: state.abortController.signal,
     });
 
@@ -1186,12 +1184,50 @@ async function generateReply() {
 
           try {
             const chunk = JSON.parse(data);
-            if (chunk.usage) usage = chunk.usage;
-            if (chunk.choices?.[0]?.finish_reason) finishReason = chunk.choices[0].finish_reason;
-            const delta = chunk.choices?.[0]?.delta || {};
             let changed = false;
-            if (delta.reasoning_content) { reasoning += delta.reasoning_content; changed = true; }
-            if (delta.content) { fullContent += delta.content; changed = true; }
+
+            if (useMcp) {
+              // Native endpoint: named events, each carrying its own `type`.
+              switch (chunk.type) {
+                case 'reasoning.delta':
+                  if (chunk.content) { reasoning += chunk.content; changed = true; }
+                  break;
+                case 'message.delta':
+                  if (chunk.content) { fullContent += chunk.content; changed = true; }
+                  break;
+                case 'tool_call.start':
+                  addToolCall(chunk.tool || 'tool', chunk.provider_info?.server_label);
+                  break;
+                case 'tool_call.success':
+                  finishToolCall(chunk.tool, true);
+                  break;
+                case 'tool_call.failure':
+                  finishToolCall(chunk.tool, false);
+                  break;
+                case 'error':
+                  throw new Error(chunk.message || chunk.error || 'Stream error');
+                case 'chat.end': {
+                  const r = chunk.result || {};
+                  if (r.stats) {
+                    usage = {
+                      prompt_tokens: r.stats.input_tokens,
+                      completion_tokens: r.stats.total_output_tokens,
+                    };
+                  }
+                  // Remember the thread so the next turn can continue it
+                  // instead of replaying the whole conversation.
+                  if (r.response_id) state.mcpResponseId = r.response_id;
+                  break;
+                }
+              }
+            } else {
+              if (chunk.usage) usage = chunk.usage;
+              if (chunk.choices?.[0]?.finish_reason) finishReason = chunk.choices[0].finish_reason;
+              const delta = chunk.choices?.[0]?.delta || {};
+              if (delta.reasoning_content) { reasoning += delta.reasoning_content; changed = true; }
+              if (delta.content) { fullContent += delta.content; changed = true; }
+            }
+
             if (changed) {
               if (!firstTokenAt) { firstTokenAt = performance.now(); state.lastLoadedModel = targetModel; clearSlow(); }
               deltaCount++;
@@ -1199,13 +1235,44 @@ async function generateReply() {
               addCopyButtons(bubble);
               scrollToBottom();
             }
-          } catch(e) { /* skip */ }
+          } catch(e) {
+            if (e instanceof SyntaxError) continue; // partial/garbage line
+            throw e;
+          }
         }
       }
 
       // Final render (streaming=false) so un-tagged reasoning gets split from
       // the answer now that the whole message has arrived.
       bubble.innerHTML = renderMessage(withReasoning(), false);
+      addCopyButtons(bubble);
+      scrollToBottom();
+    } else if (useMcp) {
+      const data = await resp.json();
+      if (data.stats) {
+        usage = {
+          prompt_tokens: data.stats.input_tokens,
+          completion_tokens: data.stats.total_output_tokens,
+        };
+      }
+      if (data.response_id) state.mcpResponseId = data.response_id;
+      // The native endpoint returns an ordered `output` array mixing reasoning,
+      // tool calls and message parts — flatten it into the same shape the
+      // OpenAI path produces.
+      for (const part of data.output || []) {
+        if (part.type === 'message') fullContent += part.content || '';
+        else if (part.type === 'reasoning') reasoning += part.content || '';
+        else if (part.type === 'tool_call') {
+          const el = addToolCall(part.name || part.tool || 'tool', part.provider_info?.server_label);
+          el.classList.remove('running');
+          el.classList.add('done');
+          const sp = el.querySelector('.tool-call-spinner');
+          if (sp) sp.textContent = '✓';
+        }
+      }
+      if (!fullContent && !reasoning) fullContent = '(empty response)';
+      state.lastLoadedModel = targetModel;
+      bubble.innerHTML = renderMessage(withReasoning());
       addCopyButtons(bubble);
       scrollToBottom();
     } else {
@@ -1250,11 +1317,18 @@ async function generateReply() {
       } else {
         bubble.innerHTML = '<em>Stopped.</em>';
       }
-    } else if (backendKey === 'anythingllm') {
-      // An AnythingLLM failure is isolated — don't tear down the LM Studio
-      // connection or trigger its reconnect loop. Just surface the error.
+      // A stopped MCP turn leaves the server thread in an unknown state.
+      state.mcpResponseId = null;
+    } else if (useMcp) {
+      // Don't tear down the connection over an MCP-specific failure — the
+      // plain endpoint may well still be fine. Surface it and let the user
+      // switch MCP off if the tool server is the problem.
+      state.mcpResponseId = null;
       bubble.className = 'message-content error';
-      bubble.textContent = `AnythingLLM request failed: ${err.message}. Check its URL, API key, and that CORS allows this site.`;
+      bubble.textContent =
+        `MCP request failed: ${err.message}. Check that the MCP server names in ` +
+        `Settings match your LM Studio mcp.json, and that this LM Studio build ` +
+        `supports /api/v1/chat.`;
     } else {
       bubble.className = 'message-content error';
       bubble.textContent = err.message;
@@ -1333,10 +1407,9 @@ async function maybeAutoName() {
 
   const userText = extractText(state.messages.find(m => m.role === 'user')?.content || '').slice(0, 400);
   const aiText = extractText(state.messages.find(m => m.role === 'assistant')?.content || '').slice(0, 400);
-  // Always name via LM Studio direct — a cheap one-off that shouldn't spin up a
-  // workspace's retrieval/agent flow. Falls back to the active model only if no
-  // LM Studio model is available.
-  const namingModel = firstLmModelId() || activeModelId();
+  // Always name via the plain completions endpoint — a cheap one-off that
+  // shouldn't drag MCP tools into the loop.
+  const namingModel = activeModelId();
   try {
     const resp = await fetch(state.apiBase + '/v1/chat/completions', {
       method: 'POST',
@@ -1387,6 +1460,7 @@ function stopStreaming() {
 function newChat() {
   state.messages = [];
   state.currentSessionId = null;
+  state.mcpResponseId = null;
   clearAttachments();
   messagesEl.innerHTML = '';
   if (welcome) messagesEl.appendChild(welcome);
@@ -1446,7 +1520,6 @@ function saveCurrentSession() {
   session.messages = state.messages;
   if (!session.customTitle && !session.autoNamed) session.title = sessionTitle(state.messages);
   session.model = state.currentModel;
-  session.backend = state.currentBackend;
   session.settings = {
     temperature: parseFloat(tempSlider.value),
     maxTokens: parseInt(tokensSlider.value),
@@ -1465,17 +1538,15 @@ function loadSession(id) {
   if (state.streaming) stopStreaming();
   state.currentSessionId = id;
   state.messages = JSON.parse(JSON.stringify(session.messages || []));
+  // Any server-side MCP thread belonged to the chat we just left.
+  state.mcpResponseId = null;
   clearAttachments();
 
-  // Restore the chat's model + backend if that option still exists (LM Studio
-  // model still loaded, or workspace still available).
-  const wantBackend = session.backend || 'lmstudio';
-  const opt = session.model && [...modelSelect.options].find(
-    o => o.value === session.model && o.dataset.backend === wantBackend);
+  // Restore the chat's model if it's still loaded in LM Studio.
+  const opt = session.model && [...modelSelect.options].find(o => o.value === session.model);
   if (opt) {
     modelSelect.value = session.model;
     state.currentModel = session.model;
-    state.currentBackend = wantBackend;
     refreshModelCaps();
   }
   // Restore the chat's settings
@@ -1874,17 +1945,22 @@ function setupListeners() {
     closeSidebar();
   });
 
-  if (anythingSave) {
-    anythingSave.addEventListener('click', () => {
-      state.anythingllmKey = anythingKey.value.trim();
+  // MCP — switching servers or toggling invalidates any open server-side
+  // thread, since the next turn runs with a different tool set.
+  if (mcpToggle) {
+    mcpToggle.addEventListener('change', () => {
+      state.mcpEnabled = mcpToggle.checked;
+      state.mcpResponseId = null;
       saveSettings();
-      const orig = anythingSave.textContent;
-      anythingSave.textContent = 'Refreshing…';
-      anythingSave.disabled = true;
-      Promise.resolve(connect()).finally(() => {
-        anythingSave.textContent = orig;
-        anythingSave.disabled = false;
-      });
+      updateMcpUI();
+    });
+  }
+  if (mcpServersInput) {
+    mcpServersInput.addEventListener('input', () => {
+      state.mcpServers = mcpServersInput.value;
+      state.mcpResponseId = null;
+      saveSettings();
+      updateMcpUI();
     });
   }
 
@@ -1918,12 +1994,6 @@ function setupListeners() {
   attachFileBtn.addEventListener('click', () => fileInput.click());
   fileInput.addEventListener('change', e => { handleAttachedFiles([...e.target.files]); e.target.value = ''; });
 
-  if (agentModeBtn) {
-    agentModeBtn.addEventListener('click', () => {
-      state.agentMode = !state.agentMode;
-      agentModeBtn.classList.toggle('active', state.agentMode);
-    });
-  }
   userInput.addEventListener('paste', e => {
     if (!state.modelCaps.vision) return;
     const imgs = [...(e.clipboardData?.items || [])]

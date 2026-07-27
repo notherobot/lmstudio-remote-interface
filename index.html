@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/png" href="favicon.png">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="style.css?v=0.6.3">
+  <link rel="stylesheet" href="style.css?v=0.7.0">
 </head>
 <body>
   <div id="app">
@@ -51,14 +51,13 @@
           <p class="setting-hint">Connected via Tailscale to your LM Studio</p>
         </div>
         <div class="setting-group">
-          <label for="anythingllm-key">AnythingLLM API Key <span class="label-optional">(optional)</span></label>
-          <input type="password" id="anythingllm-key" placeholder="API key" spellcheck="false" autocomplete="off">
-          <button id="anythingllm-save" class="btn-sm">Save &amp; refresh</button>
-          <p class="setting-hint">Saved on this device only — needed only if AnythingLLM has a password or multi-user mode enabled.</p>
-          <p class="anythingllm-status-line">
-            <span id="anythingllm-dot" class="status disconnected"></span>
-            <span id="anythingllm-status-text">Checking for AnythingLLM on port 3001…</span>
-          </p>
+          <label class="checkbox-row">
+            <input type="checkbox" id="mcp-toggle">
+            <span>Enable MCP tools</span>
+          </label>
+          <input type="text" id="mcp-servers" placeholder="playwright" spellcheck="false" autocomplete="off">
+          <p class="setting-hint">Comma-separated MCP server names from your LM Studio <code>mcp.json</code> (e.g. <code>playwright</code>). Routes chats through LM Studio's native endpoint so the model can call those tools; LM Studio runs them locally.</p>
+          <p class="setting-hint" id="mcp-status-text"></p>
         </div>
         <div class="setting-group">
           <label for="system-prompt">System Prompt</label>
@@ -123,20 +122,20 @@
         <select id="model-select" class="model-dropdown" disabled>
           <option value="">Loading...</option>
         </select>
+        <span id="mcp-indicator" class="mcp-pill hidden" title="MCP tools are enabled for this chat">MCP</span>
       </div>
       <div class="header-right">
         <div class="version-dropdown-wrap">
           <button id="version-btn" class="app-version header-version" aria-label="Show changelog" title="Click for changelog"></button>
           <div id="version-dropdown" class="version-dropdown hidden">
             <div class="version-dropdown-content">
-              <div class="version-header">v0.6.3</div>
+              <div class="version-header">v0.7.0</div>
               <ul class="version-list">
-                <li>AnythingLLM auto-discovery on port 3001</li>
-                <li>Optional AnythingLLM API key (saved locally)</li>
-                <li>Agent mode toggle for AnythingLLM workspaces</li>
-                <li>AnythingLLM reachability status in Settings</li>
-                <li>HTTPS-first connection defaults</li>
-                <li>Mobile thread pin/delete always visible</li>
+                <li>MCP tool support (Playwright, etc.)</li>
+                <li>Live tool-call activity in replies</li>
+                <li>MCP pill in header when active</li>
+                <li>AnythingLLM integration removed</li>
+                <li>Simplified model picker</li>
               </ul>
             </div>
           </div>
@@ -171,9 +170,6 @@
         <button id="attach-file-btn" class="attach-icon" aria-label="Attach photos or files" title="Attach photos or files">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
         </button>
-        <button id="agent-mode-btn" class="attach-icon agent-mode-btn hidden" aria-label="Toggle Agent mode" title="Agent mode: lets AnythingLLM use its configured tools (web search, etc.) for this message">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg>
-        </button>
         <div class="input-wrapper">
           <textarea id="user-input" placeholder="Message your model..." rows="1"></textarea>
           <button id="send-btn" class="send-button" disabled aria-label="Send">
@@ -202,6 +198,6 @@
   </div>
 
   <script src="marked.min.js"></script>
-  <script src="app.js?v=0.6.3"></script>
+  <script src="app.js?v=0.7.0"></script>
 </body>
 </html>

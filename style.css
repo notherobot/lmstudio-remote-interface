@@ -502,19 +502,6 @@ header::before {
   margin-top: 8px;
 }
 
-.anythingllm-status-line {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  margin-top: 6px;
-}
-
-.anythingllm-status-line .status {
-  margin: 0;
-}
-
 .setting-group textarea {
   width: 100%;
   background: var(--bg-input);
@@ -1103,9 +1090,75 @@ pre:has(.preview-btn) .copy-btn { right: 72px; }
 .attach-icon:hover { color: var(--text-primary); }
 .attach-icon:active { color: var(--accent); }
 
-.agent-mode-btn.active {
+/* === MCP === */
+.mcp-pill {
+  flex-shrink: 0;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 6px;
+  border-radius: 4px;
   color: var(--accent);
-  filter: drop-shadow(0 0 4px var(--accent-glow));
+  border: 1px solid var(--accent-dim);
+  background: linear-gradient(to bottom, var(--bg-lift), var(--bg-hover));
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset;
+}
+
+/* Tool calls LM Studio ran for a reply, listed above the answer text */
+.tool-calls {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.tool-call {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.76rem;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 5px 9px;
+}
+
+.tool-call-name {
+  font-family: 'Consolas', 'Monaco', monospace;
+  color: var(--text-primary);
+}
+
+.tool-call-src {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+}
+
+.tool-call-spinner {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  line-height: 1;
+}
+
+.tool-call.running .tool-call-spinner {
+  border: 2px solid var(--accent-dim);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: tool-spin 0.7s linear infinite;
+}
+
+.tool-call.done { border-color: var(--accent-dim); }
+.tool-call.done .tool-call-spinner { color: var(--success); }
+.tool-call.failed { border-color: var(--danger); }
+.tool-call.failed .tool-call-spinner { color: var(--danger); }
+
+@keyframes tool-spin {
+  to { transform: rotate(360deg); }
 }
 
 /* === Attachment previews === */
