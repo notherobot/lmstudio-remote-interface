@@ -1,7 +1,7 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.7.8';
+const APP_VERSION = 'v0.7.9';
 const APP_VERSION_DATE = '2026-07-31';
 
 // === State ===
@@ -530,17 +530,27 @@ function activeModelId() {
 }
 
 // === MCP (Model Context Protocol) ===
-// LM Studio exposes MCP servers configured in its mcp.json as "plugin"
-// integrations on its native /api/v1/chat endpoint. That endpoint speaks a
-// different dialect than the OpenAI-compatible one Scholar uses by default
-// (named SSE events, `input` instead of `messages`, server-side threading),
-// so MCP chats take a separate request/parse path — see generateReply.
+// LM Studio exposes tool providers as "plugin" integrations on its native
+// /api/v1/chat endpoint. That endpoint speaks a different dialect than the
+// OpenAI-compatible one Scholar uses by default (named SSE events, `input`
+// instead of `messages`, server-side threading), so MCP chats take a separate
+// request/parse path — see generateReply.
 //
 // LM Studio executes the tool calls itself and streams the results back, so
 // there's no client-side tool-execution loop to implement here.
 
-// Parses the comma-separated server list into `integrations` entries.
-// "playwright, fetch" -> [{type:'plugin', id:'mcp/playwright'}, ...]
+// Parses the comma-separated integration list into `integrations` entries.
+//
+// Two kinds of plugin id exist and they live in different namespaces:
+//   - servers from LM Studio's mcp.json  -> "mcp/<server_label>"
+//   - plugins installed from the LM Studio Hub -> "<owner>/<name>"
+// A bare label is taken as an mcp.json server (the common case) and gets the
+// "mcp/" prefix; anything already carrying a "/" is passed through untouched,
+// so hub plugins like "danielsig/duckduckgo" aren't mangled into
+// "mcp/danielsig/duckduckgo", which resolves to nothing.
+//
+// "playwright, danielsig/duckduckgo"
+//   -> [{type:'plugin', id:'mcp/playwright'}, {type:'plugin', id:'danielsig/duckduckgo'}]
 function mcpIntegrations() {
   return String(state.mcpServers || '')
     .split(',')
@@ -548,7 +558,7 @@ function mcpIntegrations() {
     .filter(Boolean)
     .map(label => ({
       type: 'plugin',
-      id: label.startsWith('mcp/') ? label : 'mcp/' + label,
+      id: label.includes('/') ? label : 'mcp/' + label,
     }));
 }
 

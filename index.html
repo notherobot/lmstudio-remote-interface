@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/png" href="Scholar_favicon_32.png">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="style.css?v=0.7.8">
+  <link rel="stylesheet" href="style.css?v=0.7.9">
 </head>
 <body>
   <div id="app">
@@ -71,8 +71,8 @@
             <input type="checkbox" id="mcp-toggle">
             <span>Enable MCP tools</span>
           </label>
-          <input type="text" id="mcp-servers" placeholder="playwright" spellcheck="false" autocomplete="off">
-          <p class="setting-hint">Comma-separated MCP server names from your LM Studio <code>mcp.json</code> (e.g. <code>playwright</code>). Routes chats through LM Studio's native endpoint so the model can call those tools; LM Studio runs them locally.</p>
+          <input type="text" id="mcp-servers" placeholder="danielsig/duckduckgo" spellcheck="false" autocomplete="off">
+          <p class="setting-hint">Comma-separated tool providers. Use the plain server name for anything in your LM Studio <code>mcp.json</code> (e.g. <code>playwright</code>), or the full <code>owner/name</code> for a plugin installed from the LM Studio Hub (e.g. <code>danielsig/duckduckgo</code>). Routes chats through LM Studio's native endpoint so the model can call those tools; LM Studio runs them locally.</p>
           <p class="setting-hint" id="mcp-status-text"></p>
         </div>
         <div class="setting-group">
@@ -145,8 +145,9 @@
           <button id="version-btn" class="app-version header-version" aria-label="Show changelog" title="Click for changelog"></button>
           <div id="version-dropdown" class="version-dropdown hidden">
             <div class="version-dropdown-content">
-              <div class="version-header">v0.7.8</div>
+              <div class="version-header">v0.7.9</div>
               <ul class="version-list">
+                <li>LM Studio Hub plugins work as tool providers</li>
                 <li>Tool calls show their name and arguments</li>
                 <li>Failed tool calls show the reason</li>
                 <li>Repeated tool calls flagged as a loop</li>
@@ -223,6 +224,6 @@
   </div>
 
   <script src="marked.min.js"></script>
-  <script src="app.js?v=0.7.8"></script>
+  <script src="app.js?v=0.7.9"></script>
 </body>
 </html>
