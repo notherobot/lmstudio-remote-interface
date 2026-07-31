@@ -1,13 +1,21 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.7.16';
-const APP_VERSION_DATE = '2026-07-31T22:47:57Z';
+const APP_VERSION = 'v0.7.18';
+const APP_VERSION_DATE = '2026-07-31T23:30:00Z';
 
 // Changelog, newest first. Each entry is one shipped version: its release
 // timestamp and the user-facing notes for that bump. The header dropdown
 // shows the newest 3; the "View last 10 updates" modal shows the newest 10.
 const CHANGELOG = [
+  { version: 'v0.7.18', date: '2026-07-31T23:30:00Z', notes: [
+    'Peak-2002 Aqua/Web-2.0 redesign: jelly pill buttons, brushed-metal header, glossy scrollbar',
+    'Buttons, inputs, and search boxes turned fully pill-shaped with candy-glass shine',
+    'Deeper bevels, glow rings, and glass sheens on cards, avatars, and panels',
+  ] },
+  { version: 'v0.7.17', date: '2026-07-31T23:05:00Z', notes: [
+    'Removed the triangle-mesh lattice background — kept just the Ko-Metru disc',
+  ] },
   { version: 'v0.7.16', date: '2026-07-31T22:47:57Z', notes: [
     'Triangle-mesh lattice redrawn as an SVG tile so vertices actually meet',
     'Lattice and disc merged onto one background stack so the lattice is unambiguously behind it',
