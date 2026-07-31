@@ -1,13 +1,18 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.7.15';
-const APP_VERSION_DATE = '2026-07-31T22:36:50Z';
+const APP_VERSION = 'v0.7.16';
+const APP_VERSION_DATE = '2026-07-31T22:47:57Z';
 
 // Changelog, newest first. Each entry is one shipped version: its release
 // timestamp and the user-facing notes for that bump. The header dropdown
 // shows the newest 3; the "View last 10 updates" modal shows the newest 10.
 const CHANGELOG = [
+  { version: 'v0.7.16', date: '2026-07-31T22:47:57Z', notes: [
+    'Triangle-mesh lattice redrawn as an SVG tile so vertices actually meet',
+    'Lattice and disc merged onto one background stack so the lattice is unambiguously behind it',
+    'Lattice re-oriented to horizontal lines with 60deg/120deg diagonals',
+  ] },
   { version: 'v0.7.15', date: '2026-07-31T22:36:50Z', notes: [
     'Faint triangle-mesh lattice added behind the Ko-Metru disc, echoing its facets',
   ] },
