@@ -74,29 +74,20 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Ko-Metru tower emblem, watermark-faint, etched into the app shell, with a
-   faint triangle-mesh lattice tiled behind it (echoes the disc's own
-   triangulated facets). Both are background layers on this one element so
-   the lattice is unambiguously behind the emblem — lattice is listed first
-   (painted first, rendered in back), tower mark is listed last (painted last,
-   rendered on top). The lattice SVG tile shows horizontal lines and 60/120
-   degree diagonals that form equilateral triangles; tiling creates a complete
-   triangular mesh pattern.
+/* Ko-Metru tower emblem, watermark-faint, etched into the app shell.
    Mobile crops in tight on the tower tips (matches the ring/tower reference
    crop); desktop backs off to show the full mark centered under the header. */
 #app {
-  background-image:
-    url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc2MCcgaGVpZ2h0PSc2MCcgdmlld0JveD0nMCAwIDYwIDYwJz48cGF0aCBkPSdNMCAxNUg2ME0wIDMwSDYwTTAgNDVINjAnIHN0cm9rZT0ncmdiYSgxMjYsMjAzLDI0NSwwLjA2KScgc3Ryb2tlLXdpZHRoPScxJyBmaWxsPSdub25lJy8+PHBhdGggZD0nTTAgMEwzMCA1Mk0zMCAtMzRMNjAgMThNNjAgMEwzMCA1Mk0zMCAtMzRMMCAxOCcgc3Ryb2tlPSdyZ2JhKDEyNiwyMDMsMjQ1LDAuMDYpJyBzdHJva2Utd2lkdGg9JzEnIGZpbGw9J25vbmUnLz48L3N2Zz4="),
-    url("images/tower-mark.png");
-  background-repeat: repeat, no-repeat;
-  background-position: 0 0, center 30px;
-  background-size: 60px 60px, auto 92vh;
+  background-image: url("images/tower-mark.png");
+  background-repeat: no-repeat;
+  background-position: center 30px;
+  background-size: auto 92vh;
 }
 
 @media (min-width: 768px) {
   #app {
-    background-position: 0 0, center center;
-    background-size: 60px 60px, 520px auto;
+    background-position: center center;
+    background-size: 520px auto;
   }
 }
 
