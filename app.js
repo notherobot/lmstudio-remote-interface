@@ -1,7 +1,7 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.7.10';
+const APP_VERSION = 'v0.7.11';
 const APP_VERSION_DATE = '2026-07-31';
 
 // Built-in defaults for a device that has never saved settings, so a fresh
@@ -1256,7 +1256,19 @@ async function generateReply() {
     return name ? findRunning(null) : null;
   };
 
-  const finishToolCall = (name, ok, { args, reason } = {}) => {
+  // Some tool implementations report failure by returning a normal string
+  // result (e.g. "Error: DuckDuckGo CAPTCHA blocked the search.") rather
+  // than failing the call — tool_call.success either way, nothing in the
+  // event itself distinguishes it. A truncated output preview is the only
+  // way to see that from the row instead of relying on the model to relay
+  // it faithfully in its answer.
+  const formatOutput = (output) => {
+    if (!output) return '';
+    const s = String(output).replace(/\s+/g, ' ').trim();
+    return s.length > 200 ? s.slice(0, 199) + '…' : s;
+  };
+
+  const finishToolCall = (name, ok, { args, reason, output } = {}) => {
     const call = findRunning(name) || addToolCall(name || 'tool', '');
     setToolArgs(call, args);
     call.el.classList.remove('running');
@@ -1268,6 +1280,13 @@ async function generateReply() {
       why.className = 'tool-call-error';
       why.textContent = reason;
       call.el.appendChild(why);
+    }
+    if (output) {
+      const preview = document.createElement('span');
+      preview.className = 'tool-call-output';
+      preview.textContent = formatOutput(output);
+      preview.title = String(output);
+      call.el.appendChild(preview);
     }
     checkLoop(call);
   };
@@ -1341,7 +1360,7 @@ async function generateReply() {
                   break;
                 }
                 case 'tool_call.success':
-                  finishToolCall(chunk.tool, true, { args: chunk.arguments });
+                  finishToolCall(chunk.tool, true, { args: chunk.arguments, output: chunk.output });
                   break;
                 case 'tool_call.failure':
                   // This event carries no top-level `tool` — the attempted name
@@ -1413,7 +1432,7 @@ async function generateReply() {
         else if (part.type === 'reasoning') reasoning += part.content || '';
         else if (part.type === 'tool_call') {
           addToolCall(part.tool || part.name || 'tool', providerLabel(part.provider_info));
-          finishToolCall(part.tool || part.name, true, { args: part.arguments });
+          finishToolCall(part.tool || part.name, true, { args: part.arguments, output: part.output });
         }
       }
       if (!fullContent && !reasoning) fullContent = '(empty response)';

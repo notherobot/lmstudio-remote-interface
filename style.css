@@ -1200,6 +1200,20 @@ pre:has(.preview-btn) .copy-btn { right: 72px; }
   font-size: 0.7rem;
 }
 
+/* Truncated preview of a successful call's result. Some tools report failure
+   as ordinary result text (e.g. a CAPTCHA block) rather than failing the
+   call, so this is the only place that's visible without trusting the model
+   to relay it. Full text is on the title tooltip. */
+.tool-call-output {
+  flex-basis: 100%;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Same tool, same arguments as an earlier call this turn. */
 .tool-call.repeat { border-style: dashed; }
 
