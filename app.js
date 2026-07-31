@@ -1,8 +1,30 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.7.9';
+const APP_VERSION = 'v0.7.10';
 const APP_VERSION_DATE = '2026-07-31';
+
+// Built-in defaults for a device that has never saved settings, so a fresh
+// install of Scholar starts wired for web search without retyping this on
+// every device. Both stay fully editable in Settings — these are only the
+// starting values, not enforced ones. See loadSettings.
+const DEFAULT_SYSTEM_PROMPT = `You have two tools: a web search tool and a Visit Website tool. Use them for
+anything time-sensitive, factual, or you're not certain of — don't answer
+from memory alone in those cases.
+
+1. Call search first with a specific, focused query.
+2. If the search results answer the question, stop and answer. Cite the
+   URL you used.
+3. Only call Visit Website when the search results don't have enough
+   detail — and only on one result, once. Don't revisit the same URL.
+4. If the first search doesn't have what you need, rephrase the query
+   once. If it still doesn't, say what you found and that you couldn't
+   confirm the rest — don't keep repeating the same search.
+5. Only use image search if the user asks for images.
+6. Only use View Images if the user explicitly asks to see an image.
+
+Never call the same tool with the same input twice.`;
+const DEFAULT_MCP_SERVERS = 'danielsig/duckduckgo, danielsig/visit-website';
 
 // === State ===
 const state = {
@@ -24,7 +46,7 @@ const state = {
   // configured MCP servers attached as "plugin" integrations. LM Studio runs
   // the tool calls itself, so there's no client-side tool loop here.
   mcpEnabled: false,
-  mcpServers: 'playwright',  // comma-separated mcp.json server labels
+  mcpServers: DEFAULT_MCP_SERVERS,  // comma-separated mcp.json labels and/or "owner/name" Hub plugin ids
   // LM Studio API token. Optional in general, but *required* for MCP: LM Studio
   // only lets API clients touch mcp.json servers when "Require Authentication"
   // is on and the token carries Integration Access — those servers can reach
@@ -126,27 +148,31 @@ function init() {
 }
 
 // === Settings ===
+// Applies the built-in defaults (DEFAULT_SYSTEM_PROMPT, DEFAULT_MCP_SERVERS)
+// to a fresh device, then layers this device's saved settings on top —
+// `??` so an explicitly-cleared field (saved as '') stays cleared, while a
+// field that was never saved at all falls through to the default.
 function loadSettings() {
+  let s = {};
   const saved = localStorage.getItem('lmstudio-chat-settings');
-  if (!saved) return;
-  try {
-    const s = JSON.parse(saved);
-    systemPrompt.value = s.systemPrompt || '';
-    tempSlider.value = s.temperature ?? 0.7;
-    tokensSlider.value = s.maxTokens ?? 2048;
-    streamToggle.checked = s.stream ?? true;
-    collapseToggle.checked = s.collapseThinking ?? true;
-    tempValue.textContent = tempSlider.value;
-    tokensValue.textContent = tokensSlider.value;
-    state.mcpEnabled = s.mcpEnabled ?? false;
-    state.mcpServers = s.mcpServers ?? 'playwright';
-    state.apiToken = s.apiToken ?? '';
-    if (mcpToggle) mcpToggle.checked = state.mcpEnabled;
-    if (mcpServersInput) mcpServersInput.value = state.mcpServers;
-    if (apiTokenInput) apiTokenInput.value = state.apiToken;
-    if (setupToken) setupToken.value = state.apiToken;
-    updateMcpUI();
-  } catch(e) { /* ignore */ }
+  if (saved) {
+    try { s = JSON.parse(saved); } catch(e) { /* ignore */ }
+  }
+  systemPrompt.value = s.systemPrompt ?? DEFAULT_SYSTEM_PROMPT;
+  tempSlider.value = s.temperature ?? 0.7;
+  tokensSlider.value = s.maxTokens ?? 2048;
+  streamToggle.checked = s.stream ?? true;
+  collapseToggle.checked = s.collapseThinking ?? true;
+  tempValue.textContent = tempSlider.value;
+  tokensValue.textContent = tokensSlider.value;
+  state.mcpEnabled = s.mcpEnabled ?? false;
+  state.mcpServers = s.mcpServers ?? DEFAULT_MCP_SERVERS;
+  state.apiToken = s.apiToken ?? '';
+  if (mcpToggle) mcpToggle.checked = state.mcpEnabled;
+  if (mcpServersInput) mcpServersInput.value = state.mcpServers;
+  if (apiTokenInput) apiTokenInput.value = state.apiToken;
+  if (setupToken) setupToken.value = state.apiToken;
+  updateMcpUI();
 }
 
 function saveSettings() {

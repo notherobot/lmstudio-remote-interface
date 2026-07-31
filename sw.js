@@ -1,5 +1,5 @@
 // Bump this on every release so old caches are purged (keep in sync with APP_VERSION in app.js)
-const CACHE_NAME = 'lmstudio-remote-v0.7.9';
+const CACHE_NAME = 'lmstudio-remote-v0.7.10';
 const ASSETS = [
   './',
   './index.html',
