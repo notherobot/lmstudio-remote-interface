@@ -713,15 +713,21 @@ header::before {
   pointer-events: none;
 }
 
+.avatar img {
+  width: 80%;
+  height: 80%;
+  object-fit: contain;
+}
+
 .message.user .avatar {
-  background: linear-gradient(to bottom, #34464d, #26343a);
-  color: #b9cdd1;
+  background: linear-gradient(to bottom, #2c5c78, #1d3f56);
+  color: #cdeaf7;
   border: 1px solid var(--border);
   box-shadow: var(--shadow-btn);
 }
 
 .message.assistant .avatar {
-  background: linear-gradient(to bottom, #1a4a63, #123249);
+  background: linear-gradient(to bottom, #1c3a52, #132a3c);
   color: var(--accent);
   border: 1px solid var(--accent-dim);
   box-shadow: var(--shadow-btn), 0 0 8px var(--accent-glow);

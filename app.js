@@ -1,13 +1,17 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.7.13';
-const APP_VERSION_DATE = '2026-07-31T22:22:41Z';
+const APP_VERSION = 'v0.7.14';
+const APP_VERSION_DATE = '2026-07-31T22:29:03Z';
 
 // Changelog, newest first. Each entry is one shipped version: its release
 // timestamp and the user-facing notes for that bump. The header dropdown
 // shows the newest 3; the "View last 10 updates" modal shows the newest 10.
 const CHANGELOG = [
+  { version: 'v0.7.14', date: '2026-07-31T22:29:03Z', notes: [
+    'Scholar-favicon avatar scaled down 20% and given a brighter navy backdrop',
+    'You avatar recolored to a saturated blue matching the site palette',
+  ] },
   { version: 'v0.7.13', date: '2026-07-31T22:22:41Z', notes: [
     'Changelog entries show release time, not just date',
   ] },
