@@ -1,8 +1,50 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.7.11';
+const APP_VERSION = 'v0.7.12';
 const APP_VERSION_DATE = '2026-07-31';
+
+// Changelog, newest first. Each entry is one shipped version: its release
+// date and the user-facing notes for that bump. The header dropdown shows
+// the newest 3; the "View last 10 updates" modal shows the newest 10.
+const CHANGELOG = [
+  { version: 'v0.7.12', date: '2026-07-31', notes: [
+    'Changelog now grouped by version with dates, plus a scrollable last-10 view',
+  ] },
+  { version: 'v0.7.11', date: '2026-07-31', notes: [
+    'AI avatar replaced with the Scholar favicon',
+    'Successful-but-failed tool calls show their result text',
+  ] },
+  { version: 'v0.7.10', date: '2026-07-31', notes: [
+    'Search + Visit Website wired in as the default on new devices',
+  ] },
+  { version: 'v0.7.9', date: '2026-07-31', notes: [
+    'LM Studio Hub plugins work as tool providers',
+  ] },
+  { version: 'v0.7.8', date: '2026-07-31', notes: [
+    'Tool calls show their name and arguments',
+    'Failed tool calls show the reason',
+    'Repeated tool calls flagged as a loop',
+  ] },
+  { version: 'v0.7.7', date: '2026-07-28', notes: [
+    'Favicon opacity fixed to 100%',
+  ] },
+  { version: 'v0.7.6', date: '2026-07-27', notes: [
+    'Connect errors show the exact URL tried',
+  ] },
+  { version: 'v0.7.5', date: '2026-07-27', notes: [
+    'Show/Hide toggle on token fields',
+  ] },
+  { version: 'v0.7.4', date: '2026-07-27', notes: [
+    'Setup screen token field styled to match the address field',
+  ] },
+  { version: 'v0.7.3', date: '2026-07-27', notes: [
+    'Port no longer forced to 1234',
+  ] },
+  { version: 'v0.7.2', date: '2026-07-27', notes: [
+    'API token field added to the setup screen',
+  ] },
+];
 
 // Built-in defaults for a device that has never saved settings, so a fresh
 // install of Scholar starts wired for web search without retyping this on
@@ -120,6 +162,11 @@ const scrollPill     = $('#scroll-pill');
 
 const versionBtn     = $('#version-btn');
 const versionDropdown = $('#version-dropdown');
+const versionListRecent = $('#version-list-recent');
+const changelogViewAll = $('#changelog-view-all');
+const changelogModal   = $('#changelog-modal');
+const changelogClose   = $('#changelog-close');
+const changelogModalList = $('#changelog-modal-list');
 const composerEl     = $('.composer');
 
 // === Init ===
@@ -133,6 +180,7 @@ function init() {
       el.innerHTML = `${escapeHtml(APP_VERSION)} <span class="version-date">· ${escapeHtml(formatVersionDate(APP_VERSION_DATE))}</span>`;
     }
   });
+  renderChangelog();
   loadSettings();
   loadSessions();
   setupListeners();
@@ -745,6 +793,36 @@ function formatVersionDate(iso) {
   const d = new Date(iso + 'T00:00:00');
   if (isNaN(d)) return iso;
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function changelogEntryHTML(entry) {
+  const notes = entry.notes.map(n => `<li>${escapeHtml(n)}</li>`).join('');
+  return `<div class="version-block">
+    <div class="version-header">${escapeHtml(entry.version)} <span class="version-date">· ${escapeHtml(formatVersionDate(entry.date))}</span></div>
+    <ul class="version-list">${notes}</ul>
+  </div>`;
+}
+
+function renderChangelog() {
+  if (versionListRecent) {
+    versionListRecent.innerHTML = CHANGELOG.slice(0, 3)
+      .map((entry, i) => (i > 0 ? '<hr class="version-sep">' : '') + changelogEntryHTML(entry))
+      .join('');
+  }
+  if (changelogModalList) {
+    changelogModalList.innerHTML = CHANGELOG.slice(0, 10)
+      .map((entry, i) => (i > 0 ? '<hr class="version-sep">' : '') + changelogEntryHTML(entry))
+      .join('');
+  }
+}
+
+function openChangelogModal() {
+  versionDropdown.classList.add('hidden');
+  changelogModal.classList.remove('hidden');
+}
+
+function closeChangelogModal() {
+  changelogModal.classList.add('hidden');
 }
 
 function modelLoadingHTML(modelId) {
@@ -2232,6 +2310,13 @@ function setupListeners() {
       if (!e.target.closest('.version-dropdown-wrap')) {
         versionDropdown.classList.add('hidden');
       }
+    });
+  }
+  if (changelogViewAll) changelogViewAll.addEventListener('click', openChangelogModal);
+  if (changelogClose) changelogClose.addEventListener('click', closeChangelogModal);
+  if (changelogModal) {
+    changelogModal.addEventListener('click', (e) => {
+      if (e.target === changelogModal) closeChangelogModal();
     });
   }
 

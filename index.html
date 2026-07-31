@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/png" href="Scholar_favicon_32.png">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="style.css?v=0.7.11">
+  <link rel="stylesheet" href="style.css?v=0.7.12">
 </head>
 <body>
   <div id="app">
@@ -145,26 +145,8 @@
           <button id="version-btn" class="app-version header-version" aria-label="Show changelog" title="Click for changelog"></button>
           <div id="version-dropdown" class="version-dropdown hidden">
             <div class="version-dropdown-content">
-              <div class="version-header">v0.7.11</div>
-              <ul class="version-list">
-                <li>Successful-but-failed tool calls show their result text</li>
-                <li>Search + Visit Website wired in as the default on new devices</li>
-                <li>LM Studio Hub plugins work as tool providers</li>
-                <li>Tool calls show their name and arguments</li>
-                <li>Failed tool calls show the reason</li>
-                <li>Repeated tool calls flagged as a loop</li>
-                <li>Favicon opacity fixed to 100%</li>
-                <li>Connect errors show the exact URL tried</li>
-                <li>Show/Hide toggle on token fields</li>
-                <li>Port no longer forced to 1234</li>
-                <li>API token field on setup screen</li>
-                <li>LM Studio API token support</li>
-                <li>MCP tool support (Playwright, etc.)</li>
-                <li>Live tool-call activity in replies</li>
-                <li>MCP pill in header when active</li>
-                <li>AnythingLLM integration removed</li>
-                <li>Simplified model picker</li>
-              </ul>
+              <div id="version-list-recent"></div>
+              <button type="button" id="changelog-view-all" class="link-btn changelog-view-all">View last 10 updates</button>
             </div>
           </div>
         </div>
@@ -223,9 +205,22 @@
         <iframe id="preview-frame" sandbox="allow-scripts" title="HTML preview"></iframe>
       </div>
     </div>
+
+    <!-- Changelog modal (last 10 updates) -->
+    <div id="changelog-modal" class="preview-modal hidden">
+      <div class="preview-panel changelog-panel">
+        <div class="preview-head">
+          <span>Changelog</span>
+          <button id="changelog-close" class="icon-btn" aria-label="Close changelog">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div id="changelog-modal-list" class="changelog-modal-list"></div>
+      </div>
+    </div>
   </div>
 
   <script src="marked.min.js"></script>
-  <script src="app.js?v=0.7.11"></script>
+  <script src="app.js?v=0.7.12"></script>
 </body>
 </html>
