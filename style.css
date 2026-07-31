@@ -1155,6 +1155,7 @@ pre:has(.preview-btn) .copy-btn { right: 72px; }
 .tool-call {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 7px;
   font-size: 0.76rem;
   color: var(--text-secondary);
@@ -1167,11 +1168,48 @@ pre:has(.preview-btn) .copy-btn { right: 72px; }
 .tool-call-name {
   font-family: 'Consolas', 'Monaco', monospace;
   color: var(--text-primary);
+  flex-shrink: 0;
 }
+
+/* Arguments take whatever room is left and ellipsize — they're the only way
+   to tell a genuine second call from the same call repeated. */
+.tool-call-args {
+  flex: 1;
+  min-width: 0;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tool-call-args:empty { display: none; }
 
 .tool-call-src {
   color: var(--text-muted);
   font-size: 0.7rem;
+  flex-shrink: 0;
+}
+
+.tool-call-src:empty { display: none; }
+
+.tool-call-error {
+  flex-basis: 100%;
+  color: var(--danger);
+  font-size: 0.7rem;
+}
+
+/* Same tool, same arguments as an earlier call this turn. */
+.tool-call.repeat { border-style: dashed; }
+
+.tool-loop-note {
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--warning);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-sm);
+  padding: 6px 9px;
 }
 
 .tool-call-spinner {

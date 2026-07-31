@@ -1,8 +1,8 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.7.7';
-const APP_VERSION_DATE = '2026-07-28';
+const APP_VERSION = 'v0.7.8';
+const APP_VERSION_DATE = '2026-07-31';
 
 // === State ===
 const state = {
@@ -1144,32 +1144,96 @@ async function generateReply() {
     reasoning ? `<think>${reasoning}</think>${fullContent}` : fullContent;
 
   // Live list of MCP tool calls for this reply, rendered above the text.
+  //
+  // Calls are tracked in an array rather than a name-keyed map: a model stuck
+  // in a loop calls the same tool over and over, and each attempt needs its
+  // own row (and its own arguments) for the loop to be visible at all.
   const toolsEl = document.createElement('div');
   toolsEl.className = 'tool-calls hidden';
   body.insertBefore(toolsEl, bubble);
-  const toolNodes = new Map();
+  const toolCalls = [];  // { el, name, sig }
+
+  // Plugin integrations (what mcpIntegrations sends) report `plugin_id`;
+  // ephemeral MCP servers report `server_label`.
+  const providerLabel = (info) =>
+    info?.server_label || String(info?.plugin_id || '').replace(/^mcp\//, '');
+
+  // Arguments on one line, so a repeated call is recognisable at a glance.
+  const formatArgs = (args) => {
+    if (args == null || typeof args !== 'object') return '';
+    const s = JSON.stringify(args);
+    return s.length > 140 ? s.slice(0, 139) + '…' : s;
+  };
+
+  // Warns once the same tool+arguments pair comes round repeatedly — the
+  // shape a tool loop takes. LM Studio drives the tool loop server-side and
+  // /api/v1/chat has no call limit, so Stop is the only way out.
+  const loopNote = document.createElement('div');
+  loopNote.className = 'tool-loop-note hidden';
+  const checkLoop = (call) => {
+    const n = toolCalls.filter(c => c.sig === call.sig).length;
+    if (n < 3) return;
+    loopNote.textContent =
+      `⚠ ${call.name} has run ${n} times with the same arguments — the model ` +
+      `looks stuck in a tool loop. Press Stop, then try fewer MCP tools, a ` +
+      `lower temperature, or a stronger tool-calling model.`;
+    loopNote.classList.remove('hidden');
+    toolsEl.appendChild(loopNote);  // keep it last as rows keep arriving
+  };
+
+  const setToolArgs = (call, args) => {
+    if (args == null || call.sig !== call.name) return;
+    call.sig = call.name + ' ' + JSON.stringify(args);
+    const argsEl = call.el.querySelector('.tool-call-args');
+    if (argsEl) argsEl.textContent = formatArgs(args);
+    // Repeats can only be spotted once the arguments are known.
+    if (toolCalls.some(c => c !== call && c.sig === call.sig)) call.el.classList.add('repeat');
+  };
+
   const addToolCall = (name, provider) => {
     toolsEl.classList.remove('hidden');
     const el = document.createElement('div');
     el.className = 'tool-call running';
     el.innerHTML =
       `<span class="tool-call-spinner"></span>` +
-      `<span class="tool-call-name">${escapeHtml(name)}</span>` +
-      (provider ? `<span class="tool-call-src">${escapeHtml(provider)}</span>` : '');
+      `<span class="tool-call-name"></span>` +
+      `<span class="tool-call-args"></span>` +
+      `<span class="tool-call-src"></span>`;
+    el.querySelector('.tool-call-name').textContent = name;
+    el.querySelector('.tool-call-src').textContent = provider || '';
     toolsEl.appendChild(el);
-    toolNodes.set(name, el);
+    if (!loopNote.classList.contains('hidden')) toolsEl.appendChild(loopNote);
+    const call = { el, name, sig: name };
+    toolCalls.push(call);
     scrollToBottom();
-    return el;
+    return call;
   };
-  const finishToolCall = (name, ok) => {
-    // Fall back to the most recent still-running call when the end event
-    // doesn't name the tool.
-    const el = toolNodes.get(name) || [...toolsEl.querySelectorAll('.tool-call.running')].pop();
-    if (!el) return;
-    el.classList.remove('running');
-    el.classList.add(ok ? 'done' : 'failed');
-    const spinner = el.querySelector('.tool-call-spinner');
+
+  // `name` is absent on some end events — fall back to the newest still-running
+  // row, and synthesise a row when a failure has no matching start at all
+  // (an invalid tool name fails before any tool_call.start is emitted).
+  const findRunning = (name) => {
+    for (let i = toolCalls.length - 1; i >= 0; i--) {
+      const c = toolCalls[i];
+      if (c.el.classList.contains('running') && (!name || c.name === name)) return c;
+    }
+    return name ? findRunning(null) : null;
+  };
+
+  const finishToolCall = (name, ok, { args, reason } = {}) => {
+    const call = findRunning(name) || addToolCall(name || 'tool', '');
+    setToolArgs(call, args);
+    call.el.classList.remove('running');
+    call.el.classList.add(ok ? 'done' : 'failed');
+    const spinner = call.el.querySelector('.tool-call-spinner');
     if (spinner) spinner.textContent = ok ? '✓' : '✕';
+    if (!ok && reason) {
+      const why = document.createElement('span');
+      why.className = 'tool-call-error';
+      why.textContent = reason;
+      call.el.appendChild(why);
+    }
+    checkLoop(call);
   };
 
   try {
@@ -1233,16 +1297,28 @@ async function generateReply() {
                   if (chunk.content) { fullContent += chunk.content; changed = true; }
                   break;
                 case 'tool_call.start':
-                  addToolCall(chunk.tool || 'tool', chunk.provider_info?.server_label);
+                  addToolCall(chunk.tool || 'tool', providerLabel(chunk.provider_info));
                   break;
+                case 'tool_call.arguments': {
+                  const call = findRunning(chunk.tool);
+                  if (call) setToolArgs(call, chunk.arguments);
+                  break;
+                }
                 case 'tool_call.success':
-                  finishToolCall(chunk.tool, true);
+                  finishToolCall(chunk.tool, true, { args: chunk.arguments });
                   break;
                 case 'tool_call.failure':
-                  finishToolCall(chunk.tool, false);
+                  // This event carries no top-level `tool` — the attempted name
+                  // and the arguments live under `metadata`, the cause in
+                  // `reason` ("Cannot find tool with name open_browser.").
+                  finishToolCall(chunk.metadata?.tool_name, false, {
+                    args: chunk.metadata?.arguments,
+                    reason: chunk.reason,
+                  });
                   break;
                 case 'error':
-                  throw new Error(chunk.message || chunk.error || 'Stream error');
+                  // `error` is an object: { type, message, code, param }.
+                  throw new Error(chunk.error?.message || chunk.message || 'Stream error');
                 case 'chat.end': {
                   const r = chunk.result || {};
                   if (r.stats) {
@@ -1300,11 +1376,8 @@ async function generateReply() {
         if (part.type === 'message') fullContent += part.content || '';
         else if (part.type === 'reasoning') reasoning += part.content || '';
         else if (part.type === 'tool_call') {
-          const el = addToolCall(part.name || part.tool || 'tool', part.provider_info?.server_label);
-          el.classList.remove('running');
-          el.classList.add('done');
-          const sp = el.querySelector('.tool-call-spinner');
-          if (sp) sp.textContent = '✓';
+          addToolCall(part.tool || part.name || 'tool', providerLabel(part.provider_info));
+          finishToolCall(part.tool || part.name, true, { args: part.arguments });
         }
       }
       if (!fullContent && !reasoning) fullContent = '(empty response)';

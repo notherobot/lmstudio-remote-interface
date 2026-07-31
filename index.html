@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/png" href="Scholar_favicon_32.png">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="style.css?v=0.7.7">
+  <link rel="stylesheet" href="style.css?v=0.7.8">
 </head>
 <body>
   <div id="app">
@@ -145,8 +145,11 @@
           <button id="version-btn" class="app-version header-version" aria-label="Show changelog" title="Click for changelog"></button>
           <div id="version-dropdown" class="version-dropdown hidden">
             <div class="version-dropdown-content">
-              <div class="version-header">v0.7.7</div>
+              <div class="version-header">v0.7.8</div>
               <ul class="version-list">
+                <li>Tool calls show their name and arguments</li>
+                <li>Failed tool calls show the reason</li>
+                <li>Repeated tool calls flagged as a loop</li>
                 <li>Favicon opacity fixed to 100%</li>
                 <li>Connect errors show the exact URL tried</li>
                 <li>Show/Hide toggle on token fields</li>
@@ -220,6 +223,6 @@
   </div>
 
   <script src="marked.min.js"></script>
-  <script src="app.js?v=0.7.7"></script>
+  <script src="app.js?v=0.7.8"></script>
 </body>
 </html>
