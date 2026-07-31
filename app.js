@@ -1,48 +1,48 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.7.12';
-const APP_VERSION_DATE = '2026-07-31';
+const APP_VERSION = 'v0.7.13';
+const APP_VERSION_DATE = '2026-07-31T22:22:41Z';
 
 // Changelog, newest first. Each entry is one shipped version: its release
-// date and the user-facing notes for that bump. The header dropdown shows
-// the newest 3; the "View last 10 updates" modal shows the newest 10.
+// timestamp and the user-facing notes for that bump. The header dropdown
+// shows the newest 3; the "View last 10 updates" modal shows the newest 10.
 const CHANGELOG = [
-  { version: 'v0.7.12', date: '2026-07-31', notes: [
+  { version: 'v0.7.13', date: '2026-07-31T22:22:41Z', notes: [
+    'Changelog entries show release time, not just date',
+  ] },
+  { version: 'v0.7.12', date: '2026-07-31T22:21:46Z', notes: [
     'Changelog now grouped by version with dates, plus a scrollable last-10 view',
   ] },
-  { version: 'v0.7.11', date: '2026-07-31', notes: [
+  { version: 'v0.7.11', date: '2026-07-31T18:44:08Z', notes: [
     'AI avatar replaced with the Scholar favicon',
     'Successful-but-failed tool calls show their result text',
   ] },
-  { version: 'v0.7.10', date: '2026-07-31', notes: [
+  { version: 'v0.7.10', date: '2026-07-31T18:18:53Z', notes: [
     'Search + Visit Website wired in as the default on new devices',
   ] },
-  { version: 'v0.7.9', date: '2026-07-31', notes: [
+  { version: 'v0.7.9', date: '2026-07-31T18:08:26Z', notes: [
     'LM Studio Hub plugins work as tool providers',
   ] },
-  { version: 'v0.7.8', date: '2026-07-31', notes: [
+  { version: 'v0.7.8', date: '2026-07-31T17:10:03Z', notes: [
     'Tool calls show their name and arguments',
     'Failed tool calls show the reason',
     'Repeated tool calls flagged as a loop',
   ] },
-  { version: 'v0.7.7', date: '2026-07-28', notes: [
+  { version: 'v0.7.7', date: '2026-07-28T17:36:19Z', notes: [
     'Favicon opacity fixed to 100%',
   ] },
-  { version: 'v0.7.6', date: '2026-07-27', notes: [
+  { version: 'v0.7.6', date: '2026-07-27T22:41:53Z', notes: [
     'Connect errors show the exact URL tried',
   ] },
-  { version: 'v0.7.5', date: '2026-07-27', notes: [
+  { version: 'v0.7.5', date: '2026-07-27T22:34:59Z', notes: [
     'Show/Hide toggle on token fields',
   ] },
-  { version: 'v0.7.4', date: '2026-07-27', notes: [
+  { version: 'v0.7.4', date: '2026-07-27T22:32:53Z', notes: [
     'Setup screen token field styled to match the address field',
   ] },
-  { version: 'v0.7.3', date: '2026-07-27', notes: [
+  { version: 'v0.7.3', date: '2026-07-27T22:31:33Z', notes: [
     'Port no longer forced to 1234',
-  ] },
-  { version: 'v0.7.2', date: '2026-07-27', notes: [
-    'API token field added to the setup screen',
   ] },
 ];
 
@@ -790,9 +790,15 @@ function escapeHtml(text) {
 }
 
 function formatVersionDate(iso) {
-  const d = new Date(iso + 'T00:00:00');
+  // Accepts either a bare date ('2026-07-31') or a full timestamp
+  // ('2026-07-31T22:22:41Z'); only the latter gets a time appended.
+  const hasTime = /T\d{2}:\d{2}/.test(iso);
+  const d = new Date(hasTime ? iso : iso + 'T00:00:00');
   if (isNaN(d)) return iso;
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  const dateStr = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  if (!hasTime) return dateStr;
+  const timeStr = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  return `${dateStr}, ${timeStr}`;
 }
 
 function changelogEntryHTML(entry) {
