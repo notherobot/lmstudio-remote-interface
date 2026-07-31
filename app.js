@@ -357,7 +357,14 @@ function addMessage(role, content, isError) {
 
   const avatar = document.createElement('div');
   avatar.className = 'avatar';
-  avatar.textContent = role === 'user' ? 'You' : 'AI';
+  if (role === 'user') {
+    avatar.textContent = 'You';
+  } else {
+    const faviconImg = document.createElement('img');
+    faviconImg.src = 'Scholar_favicon_32.png';
+    faviconImg.alt = 'Scholar';
+    avatar.appendChild(faviconImg);
+  }
 
   const body = document.createElement('div');
   body.className = 'message-body';
@@ -1139,7 +1146,10 @@ async function generateReply() {
   wrap.className = 'message assistant';
   const avatar = document.createElement('div');
   avatar.className = 'avatar';
-  avatar.textContent = 'AI';
+  const faviconImg = document.createElement('img');
+  faviconImg.src = 'Scholar_favicon_32.png';
+  faviconImg.alt = 'Scholar';
+  avatar.appendChild(faviconImg);
   const body = document.createElement('div');
   body.className = 'message-body';
   const bubble = document.createElement('div');
