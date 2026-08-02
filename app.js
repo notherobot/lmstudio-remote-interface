@@ -1,13 +1,28 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.7.16';
-const APP_VERSION_DATE = '2026-07-31T22:47:57Z';
+const APP_VERSION = 'v0.7.20';
+const APP_VERSION_DATE = '2026-08-02T00:00:00Z';
 
 // Changelog, newest first. Each entry is one shipped version: its release
 // timestamp and the user-facing notes for that bump. The header dropdown
 // shows the newest 3; the "View last 10 updates" modal shows the newest 10.
 const CHANGELOG = [
+  { version: 'v0.7.20', date: '2026-08-02T00:00:00Z', notes: [
+    'Default max-tokens raised from 2048 to 20000',
+  ] },
+  { version: 'v0.7.19', date: '2026-08-01T19:15:00Z', notes: [
+    'PDF uploads: text is extracted client-side (via pdf.js) and attached like a text file',
+    'Drag-and-drop and the attach button both route .pdf files through extraction',
+  ] },
+  { version: 'v0.7.18', date: '2026-07-31T23:30:00Z', notes: [
+    'Peak-2002 Aqua/Web-2.0 redesign: jelly pill buttons, brushed-metal header, glossy scrollbar',
+    'Buttons, inputs, and search boxes turned fully pill-shaped with candy-glass shine',
+    'Deeper bevels, glow rings, and glass sheens on cards, avatars, and panels',
+  ] },
+  { version: 'v0.7.17', date: '2026-07-31T23:05:00Z', notes: [
+    'Removed the triangle-mesh lattice background — kept just the Ko-Metru disc',
+  ] },
   { version: 'v0.7.16', date: '2026-07-31T22:47:57Z', notes: [
     'Triangle-mesh lattice redrawn as an SVG tile so vertices actually meet',
     'Lattice and disc merged onto one background stack so the lattice is unambiguously behind it',
@@ -2052,7 +2067,12 @@ function updateSendBtn() {
 }
 
 // === Attachments ===
-const MAX_FILE_BYTES = 1024 * 1024; // 1 MB per text file
+const MAX_FILE_BYTES = 1024 * 1024; // 1 MB per text file (also caps extracted PDF text)
+const MAX_PDF_BYTES = 20 * 1024 * 1024; // 20 MB per PDF, before text extraction
+
+if (window.pdfjsLib) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdf.worker.min.js';
+}
 
 function readFile(file, asDataUrl) {
   return new Promise((resolve, reject) => {
@@ -2064,16 +2084,18 @@ function readFile(file, asDataUrl) {
   });
 }
 
-// Splits a mixed file list (from the picker or a drag-drop) into images vs
-// everything else, routing each to its handler.
+// Splits a mixed file list (from the picker or a drag-drop) into images,
+// PDFs, and plain text, routing each to its handler.
 function handleAttachedFiles(files) {
   if (!files.length) return;
   const images = files.filter(f => f.type.startsWith('image/'));
-  const texts = files.filter(f => !f.type.startsWith('image/'));
+  const pdfs = files.filter(f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name));
+  const texts = files.filter(f => !images.includes(f) && !pdfs.includes(f));
   if (images.length) {
     if (state.modelCaps.vision) handleImageFiles(images);
     else alert('The current model doesn\'t support images.');
   }
+  if (pdfs.length) handlePdfFiles(pdfs);
   if (texts.length) handleTextFiles(texts);
 }
 
@@ -2105,6 +2127,44 @@ async function handleTextFiles(files) {
       const text = await readFile(file, false);
       state.attachments.push({ kind: 'file', name: file.name, size: file.size, text });
     } catch (e) { /* skip unreadable file */ }
+  }
+  renderAttachments();
+  updateSendBtn();
+}
+
+// Extracts text (not a render) from each page via pdf.js, running entirely
+// in-browser — the PDF's bytes never leave the device. Scanned/image-only
+// PDFs yield no text and are skipped since there's nothing to send.
+async function handlePdfFiles(files) {
+  if (!window.pdfjsLib) {
+    alert('PDF support failed to load — try reloading the page.');
+    return;
+  }
+  for (const file of files) {
+    if (file.size > MAX_PDF_BYTES) {
+      alert(`"${file.name}" is larger than 20 MB and was skipped.`);
+      continue;
+    }
+    try {
+      const buf = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+      let text = '';
+      for (let i = 1; i <= pdf.numPages && text.length <= MAX_FILE_BYTES; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        text += content.items.map(it => it.str).join(' ') + '\n\n';
+      }
+      text = text.trim();
+      if (!text) {
+        alert(`"${file.name}" has no extractable text (it may be a scanned image) and was skipped.`);
+        continue;
+      }
+      const truncated = text.length > MAX_FILE_BYTES;
+      if (truncated) text = text.slice(0, MAX_FILE_BYTES) + '\n\n[...truncated]';
+      state.attachments.push({ kind: 'file', name: file.name, size: file.size, text });
+    } catch (e) {
+      alert(`Couldn't read "${file.name}" as a PDF.`);
+    }
   }
   renderAttachments();
   updateSendBtn();
