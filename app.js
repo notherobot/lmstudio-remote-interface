@@ -1,13 +1,16 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.7.19';
-const APP_VERSION_DATE = '2026-08-01T19:15:00Z';
+const APP_VERSION = 'v0.7.20';
+const APP_VERSION_DATE = '2026-08-02T00:00:00Z';
 
 // Changelog, newest first. Each entry is one shipped version: its release
 // timestamp and the user-facing notes for that bump. The header dropdown
 // shows the newest 3; the "View last 10 updates" modal shows the newest 10.
 const CHANGELOG = [
+  { version: 'v0.7.20', date: '2026-08-02T00:00:00Z', notes: [
+    'Default max-tokens raised from 2048 to 20000',
+  ] },
   { version: 'v0.7.19', date: '2026-08-01T19:15:00Z', notes: [
     'PDF uploads: text is extracted client-side (via pdf.js) and attached like a text file',
     'Drag-and-drop and the attach button both route .pdf files through extraction',
