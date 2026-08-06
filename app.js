@@ -1,13 +1,17 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.7.20';
-const APP_VERSION_DATE = '2026-08-02T00:00:00Z';
+const APP_VERSION = 'v0.7.21';
+const APP_VERSION_DATE = '2026-08-06T00:00:00Z';
 
 // Changelog, newest first. Each entry is one shipped version: its release
 // timestamp and the user-facing notes for that bump. The header dropdown
 // shows the newest 3; the "View last 10 updates" modal shows the newest 10.
 const CHANGELOG = [
+  { version: 'v0.7.21', date: '2026-08-06T00:00:00Z', notes: [
+    'Model picker rebuilt as a proper list: shows what each model is best at, its context length, quantization, and vision support',
+    'Composer restyled Claude-style — attach and send buttons now sit in a row below the message box',
+  ] },
   { version: 'v0.7.20', date: '2026-08-02T00:00:00Z', notes: [
     'Default max-tokens raised from 2048 to 20000',
   ] },
@@ -104,7 +108,8 @@ const state = {
   abortController: null,
   currentModel: null,
   modelCaps: { vision: false },
-  modelMeta: {},          // { [modelId]: { type: 'llm'|'vlm'|... } } from /api/v0/models
+  modelMeta: {},          // { [modelId]: { type, publisher, quantization, maxContextLength, state } } from /api/v0/models
+  availableModels: [],    // raw /v1/models list, used to render the model picker
   lastLoadedModel: null,  // model that last actually produced output — drives the loading bar
   attachments: [],       // pending uploads: { kind:'image'|'file', name, size, url?, text? }
   sessions: [],          // saved chat sessions
@@ -145,6 +150,11 @@ const chatContainer  = $('#chat-container');
 const inputArea      = $('#input-area');
 const statusDot      = $('#status-indicator');
 const modelSelect    = $('#model-select');
+const modelPickerBtn   = $('#model-picker-btn');
+const modelPickerLabel = $('#model-picker-label');
+const modelModal       = $('#model-modal');
+const modelModalClose  = $('#model-modal-close');
+const modelPickerList  = $('#model-picker-list');
 const newChatBtn     = $('#new-chat-btn');
 
 const sidebarToggle  = $('#sidebar-toggle');
@@ -301,17 +311,23 @@ async function connect() {
     state.connected = true;
 
     const models = data.data || [];
+    state.availableModels = models;
     populateModelDropdown(models);
     await refreshModelMeta();
     refreshModelCaps();
+    renderModelPicker();
+    syncModelPickerLabel();
 
     setStatus('connected');
     updateSendBtn();
   } catch (err) {
     setStatus('disconnected');
     state.connected = false;
+    state.availableModels = [];
     modelSelect.innerHTML = '<option value="">Offline</option>';
     modelSelect.disabled = true;
+    modelPickerBtn.disabled = true;
+    modelPickerLabel.textContent = 'Offline';
     state.modelCaps.vision = false;
     // Retry silently
     setTimeout(connect, 5000);
@@ -399,6 +415,10 @@ function showSetup() {
   setStatus('disconnected');
   modelSelect.innerHTML = '<option value="">Offline</option>';
   modelSelect.disabled = true;
+  modelPickerBtn.disabled = true;
+  modelPickerLabel.textContent = 'Offline';
+  state.availableModels = [];
+  modelPickerList.innerHTML = '';
   messagesEl.innerHTML = '';
   if (welcome) messagesEl.appendChild(welcome);
   showWelcome(true);
@@ -548,6 +568,7 @@ function addModelDivider(text) {
 
 function onModelChange() {
   const selected = modelSelect.value;
+  syncModelPickerLabel();
   if (!selected || selected === state.currentModel) return;
   state.currentModel = selected;
   // Switching models invalidates the server-side MCP thread — the next turn
@@ -760,9 +781,12 @@ function populateModelDropdown(lmModels) {
 
   modelSelect.innerHTML = '';
   modelSelect.disabled = false;
+  modelPickerBtn.disabled = false;
 
   if (lmModels.length === 0) {
     modelSelect.innerHTML = '<option value="">No models loaded</option>';
+    modelPickerBtn.disabled = true;
+    modelPickerLabel.textContent = 'No models loaded';
     return;
   }
 
@@ -780,15 +804,24 @@ function populateModelDropdown(lmModels) {
   state.currentModel = modelSelect.value || null;
 }
 
-// Fetch type info ("llm" / "vlm" / ...) for every downloaded model in one shot,
-// via LM Studio's native API. Powers both capability detection and routing.
+// Fetch type/publisher/quantization/context info for every downloaded model
+// in one shot, via LM Studio's native API. Powers capability detection,
+// routing, and the informative model picker.
 async function refreshModelMeta() {
   try {
     const resp = await fetch(state.apiBase + '/api/v0/models', { headers: authHeaders(), signal: AbortSignal.timeout(4000) });
     if (resp.ok) {
       const data = await resp.json();
       const meta = {};
-      (data.data || []).forEach(m => { meta[m.id] = { type: (m.type || '').toLowerCase() }; });
+      (data.data || []).forEach(m => {
+        meta[m.id] = {
+          type: (m.type || '').toLowerCase(),
+          publisher: m.publisher || '',
+          quantization: m.quantization || '',
+          maxContextLength: m.max_context_length || null,
+          state: m.state || '',
+        };
+      });
       state.modelMeta = meta;
     }
   } catch (e) { /* endpoint unavailable — routing/caps fall back to name heuristics */ }
@@ -796,6 +829,102 @@ async function refreshModelMeta() {
 
 function modelType(id) {
   return state.modelMeta[id]?.type || (nameSuggestsVision(id) ? 'vlm' : '');
+}
+
+// Pull a parameter count (in billions) out of a model id/slug, e.g.
+// "qwen2.5-7b-instruct" -> 7, "mixtral-8x7b" -> 56. Falls back to the same
+// family overrides prettyModelName uses for slugs with no size token at all.
+function modelSizeBillions(id) {
+  if (!id) return null;
+  const slug = id.includes('/') ? id.slice(id.indexOf('/') + 1) : id;
+  for (const t of slug.split(/[-_]/).filter(Boolean)) {
+    const m = /^(?:(\d+)x)?(\d+(?:\.\d+)?)b$/i.exec(t);
+    if (m) return (m[1] ? parseInt(m[1], 10) : 1) * parseFloat(m[2]);
+  }
+  const override = MODEL_SIZE_OVERRIDES.find(([re]) => re.test(slug));
+  const m = override && /(\d+(?:\.\d+)?)B/i.exec(override[1]);
+  return m ? parseFloat(m[1]) : null;
+}
+
+// A short, honest "what's this for" line, in the spirit of Claude's model
+// picker — but derived from the model's actual parameter count rather than
+// a marketing tier, since local models don't come with one of their own.
+function modelTaskBlurb(id) {
+  const b = modelSizeBillions(id);
+  if (b == null) return 'General purpose';
+  if (b < 4) return 'Fastest — great for quick answers';
+  if (b < 15) return 'Balanced — good for everyday tasks';
+  if (b < 35) return 'Strong reasoning — for complex tasks';
+  return 'Most capable — for your toughest challenges';
+}
+
+function formatContextLength(n) {
+  if (!n) return null;
+  if (n >= 1000000) return (n % 1000000 === 0 ? n / 1000000 : (n / 1000000).toFixed(1)) + 'M context';
+  if (n >= 1000) return Math.round(n / 1000) + 'K context';
+  return n + ' context';
+}
+
+function syncModelPickerLabel() {
+  if (!modelPickerLabel) return;
+  const id = modelSelect.value;
+  modelPickerLabel.textContent = id ? prettyModelName(id) : (modelSelect.options[0]?.textContent || 'No models');
+}
+
+function selectModelFromPicker(id) {
+  if (modelSelect.value === id) { closeModelPicker(); return; }
+  modelSelect.value = id;
+  modelSelect.dispatchEvent(new Event('change'));
+  syncModelPickerLabel();
+  closeModelPicker();
+}
+
+function openModelPicker() {
+  if (modelPickerBtn.disabled) return;
+  renderModelPicker();
+  modelModal.classList.remove('hidden');
+}
+
+function closeModelPicker() {
+  modelModal.classList.add('hidden');
+}
+
+// Builds the informative model-picker list from state.availableModels +
+// whatever richer metadata refreshModelMeta was able to fetch.
+function renderModelPicker() {
+  if (!modelPickerList) return;
+  const models = state.availableModels;
+
+  if (!models.length) {
+    modelPickerList.innerHTML = '<p class="model-picker-empty">No models loaded in LM Studio.</p>';
+    return;
+  }
+
+  const selected = modelSelect.value;
+  modelPickerList.innerHTML = models.map(m => {
+    const meta = state.modelMeta[m.id] || {};
+    const vision = modelType(m.id) === 'vlm';
+    const tags = [];
+    if (vision) tags.push('Vision');
+    const ctx = formatContextLength(meta.maxContextLength);
+    if (ctx) tags.push(ctx);
+    if (meta.quantization) tags.push(meta.quantization);
+    if (meta.state === 'loaded') tags.push('Loaded');
+
+    const isSelected = m.id === selected;
+    return `<button type="button" class="model-picker-item${isSelected ? ' selected' : ''}" data-model-id="${escapeHtml(m.id)}" title="${escapeHtml(m.id)}">
+      <div class="model-picker-item-main">
+        <div class="model-picker-name">${escapeHtml(prettyModelName(m.id))}</div>
+        <div class="model-picker-blurb">${escapeHtml(modelTaskBlurb(m.id))}</div>
+        ${tags.length ? `<div class="model-picker-meta">${tags.map(t => `<span class="model-picker-tag">${escapeHtml(t)}</span>`).join('')}</div>` : ''}
+      </div>
+      ${isSelected ? '<span class="model-picker-check"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></span>' : ''}
+    </button>`;
+  }).join('');
+
+  modelPickerList.querySelectorAll('.model-picker-item').forEach(btn => {
+    btn.addEventListener('click', () => selectModelFromPicker(btn.dataset.modelId));
+  });
 }
 
 // Detect capabilities of the active model.
@@ -1842,6 +1971,7 @@ function loadSession(id) {
     modelSelect.value = session.model;
     state.currentModel = session.model;
     refreshModelCaps();
+    syncModelPickerLabel();
   }
   // Restore the chat's settings
   if (session.settings) {
@@ -2346,6 +2476,9 @@ function setupListeners() {
 
   // Chat
   modelSelect.addEventListener('change', onModelChange);
+  modelPickerBtn.addEventListener('click', openModelPicker);
+  modelModalClose.addEventListener('click', closeModelPicker);
+  modelModal.addEventListener('click', e => { if (e.target === modelModal) closeModelPicker(); });
   newChatBtn.addEventListener('click', newChat);
   userInput.addEventListener('input', () => { autoGrow(); updateSendBtn(); });
   userInput.addEventListener('keydown', e => {
