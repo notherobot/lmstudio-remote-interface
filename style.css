@@ -1183,8 +1183,8 @@ pre:has(.preview-btn) .copy-btn { right: 72px; }
   gap: 8px;
   background: linear-gradient(to bottom, var(--bg-input), var(--bg-secondary));
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 12px 18px;
+  border-radius: 999px;
+  padding: 12px 20px;
   box-shadow: var(--shadow-sunken), 0 1px 0 rgba(255, 255, 255, 0.05);
   transition: border-color 0.15s, box-shadow 0.15s;
 }
@@ -1288,38 +1288,18 @@ pre:has(.preview-btn) .copy-btn { right: 72px; }
   opacity: 0.75;
 }
 
-/* === Composer (Claude-style: input box on top, tool row underneath) === */
+/* === Composer (peak-2002 pill bubble on top, tool row underneath) === */
 .composer {
   display: flex;
   flex-direction: column;
-  background: linear-gradient(to bottom, var(--bg-input), var(--bg-secondary));
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-sunken), 0 1px 0 rgba(255, 255, 255, 0.05);
-  transition: border-color 0.15s, box-shadow 0.15s;
+  gap: 6px;
 }
-
-.composer:focus-within {
-  border-color: var(--accent-dim);
-  box-shadow: var(--shadow-sunken), 0 0 0 3px var(--accent-glow);
-}
-
-/* The text field itself no longer carries its own border/background —
-   the outer .composer box now owns the chrome, so this is just padding. */
-.composer .input-wrapper {
-  background: none;
-  border: none;
-  box-shadow: none;
-  padding: 12px 18px 4px;
-}
-
-.composer:focus-within .input-wrapper { box-shadow: none; }
 
 .composer-controls {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px 8px;
+  padding: 0 8px;
 }
 
 .composer-controls-spacer { flex: 1; }
@@ -1932,7 +1912,7 @@ pre:has(.preview-btn) .copy-btn { right: 72px; }
 }
 
 /* === Drag-and-drop highlight === */
-.composer.drag-over {
+.composer.drag-over .input-wrapper {
   border-color: var(--accent);
   border-style: dashed;
 }

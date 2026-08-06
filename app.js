@@ -1,13 +1,17 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.7.21';
-const APP_VERSION_DATE = '2026-08-06T00:00:00Z';
+const APP_VERSION = 'v0.7.22';
+const APP_VERSION_DATE = '2026-08-06T01:00:00Z';
 
 // Changelog, newest first. Each entry is one shipped version: its release
 // timestamp and the user-facing notes for that bump. The header dropdown
 // shows the newest 3; the "View last 10 updates" modal shows the newest 10.
 const CHANGELOG = [
+  { version: 'v0.7.22', date: '2026-08-06T01:00:00Z', notes: [
+    'Model picker descriptions now recognize reasoning, agentic, and code-tuned models by name (e.g. Nemotron, R1, coder variants) instead of guessing from size alone',
+    'Composer reverted to a rounded pill text field, with the tool row kept underneath as a separate strip',
+  ] },
   { version: 'v0.7.21', date: '2026-08-06T00:00:00Z', notes: [
     'Model picker rebuilt as a proper list: shows what each model is best at, its context length, quantization, and vision support',
     'Composer restyled Claude-style — attach and send buttons now sit in a row below the message box',
@@ -846,16 +850,46 @@ function modelSizeBillions(id) {
   return m ? parseFloat(m[1]) : null;
 }
 
+// A model's actual purpose (reasoning-tuned, code-tuned, etc.) is a far
+// better signal than its raw parameter count — checked first, before falling
+// back to a size-based guess. Order matters: most specific families first.
+const MODEL_SPECIALTY_HINTS = [
+  [/nemotron/i, 'Reasoning & agentic — built for tool use and long multi-step tasks'],
+  [/deepseek-r1|magistral|\bqwq\b|reasoner|-think(?:ing)?\b/i, 'Deep reasoning — thinks step-by-step, slower but more thorough'],
+  [/coder?|codestral|starcoder|codegemma/i, 'Code-focused — best for programming tasks'],
+  [/\bembed(?:ding)?\b/i, 'Embedding model — for search/retrieval, not chat'],
+];
+
+// Qualitative size branding (e.g. NVIDIA's Nemotron Nano/Super/Ultra tiers)
+// used only when no numeric parameter count can be parsed from the name.
+const MODEL_TIER_HINTS = [
+  [/\b(ultra|xxl)\b/i, 'Most capable — for your toughest challenges'],
+  [/\b(super|large|\bxl\b)\b/i, 'Strong reasoning — for complex tasks'],
+  [/\b(medium|mid)\b/i, 'Balanced — good for everyday tasks'],
+  [/\b(nano|mini|tiny|small)\b/i, 'Fastest — great for quick answers'],
+];
+
 // A short, honest "what's this for" line, in the spirit of Claude's model
-// picker — but derived from the model's actual parameter count rather than
-// a marketing tier, since local models don't come with one of their own.
+// picker — derived from the model's stated purpose or parameter count, since
+// local models don't come with an official tier of their own.
 function modelTaskBlurb(id) {
+  const slug = (id || '').toLowerCase();
+
+  const specialty = MODEL_SPECIALTY_HINTS.find(([re]) => re.test(slug));
+  if (specialty) return specialty[1];
+
   const b = modelSizeBillions(id);
-  if (b == null) return 'General purpose';
-  if (b < 4) return 'Fastest — great for quick answers';
-  if (b < 15) return 'Balanced — good for everyday tasks';
-  if (b < 35) return 'Strong reasoning — for complex tasks';
-  return 'Most capable — for your toughest challenges';
+  if (b != null) {
+    if (b < 4) return 'Fastest — great for quick answers';
+    if (b < 15) return 'Balanced — good for everyday tasks';
+    if (b < 35) return 'Strong reasoning — for complex tasks';
+    return 'Most capable — for your toughest challenges';
+  }
+
+  const tier = MODEL_TIER_HINTS.find(([re]) => re.test(slug));
+  if (tier) return tier[1];
+
+  return 'General purpose';
 }
 
 function formatContextLength(n) {
