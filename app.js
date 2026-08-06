@@ -1,13 +1,16 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.7.22';
-const APP_VERSION_DATE = '2026-08-06T01:00:00Z';
+const APP_VERSION = 'v0.7.23';
+const APP_VERSION_DATE = '2026-08-06T02:00:00Z';
 
 // Changelog, newest first. Each entry is one shipped version: its release
 // timestamp and the user-facing notes for that bump. The header dropdown
 // shows the newest 3; the "View last 10 updates" modal shows the newest 10.
 const CHANGELOG = [
+  { version: 'v0.7.23', date: '2026-08-06T02:00:00Z', notes: [
+    'Model picker sorted smallest to largest by parameter count',
+  ] },
   { version: 'v0.7.22', date: '2026-08-06T01:00:00Z', notes: [
     'Model picker descriptions now recognize reasoning, agentic, and code-tuned models by name (e.g. Nemotron, R1, coder variants) instead of guessing from size alone',
     'Composer reverted to a rounded pill text field, with the tool row kept underneath as a separate strip',
@@ -314,7 +317,11 @@ async function connect() {
     const data = await resp.json();
     state.connected = true;
 
-    const models = data.data || [];
+    const models = (data.data || []).slice().sort((a, b) => {
+      const wa = modelSortWeight(a.id), wb = modelSortWeight(b.id);
+      if (wa !== wb) return wa - wb;
+      return prettyModelName(a.id).localeCompare(prettyModelName(b.id));
+    });
     state.availableModels = models;
     populateModelDropdown(models);
     await refreshModelMeta();
@@ -848,6 +855,22 @@ function modelSizeBillions(id) {
   const override = MODEL_SIZE_OVERRIDES.find(([re]) => re.test(slug));
   const m = override && /(\d+(?:\.\d+)?)B/i.exec(override[1]);
   return m ? parseFloat(m[1]) : null;
+}
+
+// Sort key for the model list/picker (smallest to largest). Falls back to
+// qualitative size branding (e.g. "nano"/"super"/"ultra") when no parameter
+// count can be parsed, and to the very end for names with no size signal at
+// all — those sort alphabetically among themselves.
+function modelSortWeight(id) {
+  const b = modelSizeBillions(id);
+  if (b != null) return b;
+  const slug = (id || '').toLowerCase();
+  if (/\b(nano|mini|tiny)\b/.test(slug)) return 3;
+  if (/\bsmall\b/.test(slug)) return 8;
+  if (/\b(medium|mid)\b/.test(slug)) return 20;
+  if (/\b(super|large|xl)\b/.test(slug)) return 60;
+  if (/\b(ultra|xxl)\b/.test(slug)) return 200;
+  return Infinity;
 }
 
 // A model's actual purpose (reasoning-tuned, code-tuned, etc.) is a far
