@@ -1,13 +1,16 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.7.25';
-const APP_VERSION_DATE = '2026-08-08T01:00:00Z';
+const APP_VERSION = 'v0.7.26';
+const APP_VERSION_DATE = '2026-08-08T02:00:00Z';
 
 // Changelog, newest first. Each entry is one shipped version: its release
 // timestamp and the user-facing notes for that bump. The header dropdown
 // shows the newest 3; the "View last 10 updates" modal shows the newest 10.
 const CHANGELOG = [
+  { version: 'v0.7.26', date: '2026-08-08T02:00:00Z', notes: [
+    'Fixed Low effort toggle — LM Studio expects reasoning: {effort}, not a flat reasoning_effort field, so it was being silently ignored',
+  ] },
   { version: 'v0.7.25', date: '2026-08-08T01:00:00Z', notes: [
     'Composer gained Think and Low effort toggles — control reasoning per chat',
   ] },
@@ -1661,8 +1664,13 @@ async function generateReply() {
     // Reasoning controls — additive on top of either shape above. A model
     // that doesn't recognize these fields just ignores them; "on"/"normal"
     // are each the default already, so only deviations from that get sent.
+    // Two independent mechanisms, because different model families use
+    // different ones: Qwen3-style templates read chat_template_kwargs, while
+    // gpt-oss-style models read the nested `reasoning.effort` LM Studio (and
+    // OpenAI's Responses API) actually document — NOT a flat
+    // `reasoning_effort` string, which LM Studio silently ignores.
     if (!state.enableThinking) payload.chat_template_kwargs = { enable_thinking: false };
-    if (state.lowEffort) payload.reasoning_effort = 'low';
+    if (state.lowEffort) payload.reasoning = { effort: 'low' };
 
     const resp = await fetch(url, {
       method: 'POST',
