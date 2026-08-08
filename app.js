@@ -1,13 +1,16 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.7.24';
-const APP_VERSION_DATE = '2026-08-08T00:00:00Z';
+const APP_VERSION = 'v0.7.25';
+const APP_VERSION_DATE = '2026-08-08T01:00:00Z';
 
 // Changelog, newest first. Each entry is one shipped version: its release
 // timestamp and the user-facing notes for that bump. The header dropdown
 // shows the newest 3; the "View last 10 updates" modal shows the newest 10.
 const CHANGELOG = [
+  { version: 'v0.7.25', date: '2026-08-08T01:00:00Z', notes: [
+    'Composer gained Think and Low effort toggles — control reasoning per chat',
+  ] },
   { version: 'v0.7.24', date: '2026-08-08T00:00:00Z', notes: [
     'Prompts can be edited and resent — replaces that turn and everything after it',
     'Copy button added to sent prompts (answers already had one)',
@@ -144,6 +147,11 @@ const state = {
   // whenever the conversation changes out from under it (new/loaded chat,
   // regenerate), which falls back to sending flattened history.
   mcpResponseId: null,
+  // Reasoning controls, sent as chat_template_kwargs.enable_thinking and
+  // reasoning_effort on every request. Models that don't support them just
+  // ignore the extra fields. See generateReply.
+  enableThinking: true,
+  lowEffort: false,
 };
 
 // === DOM ===
@@ -197,6 +205,8 @@ const attachFileBtn  = $('#attach-file-btn');
 const fileInput      = $('#file-input');
 const attachmentsEl  = $('#attachments');
 const mcpIndicator   = $('#mcp-indicator');
+const thinkingToggleBtn   = $('#thinking-toggle-btn');
+const lowEffortToggleBtn  = $('#low-effort-toggle-btn');
 
 const historyBtn     = $('#history-btn');
 const historyPanel   = $('#history-panel');
@@ -264,11 +274,14 @@ function loadSettings() {
   state.mcpEnabled = s.mcpEnabled ?? false;
   state.mcpServers = s.mcpServers ?? DEFAULT_MCP_SERVERS;
   state.apiToken = s.apiToken ?? '';
+  state.enableThinking = s.enableThinking ?? true;
+  state.lowEffort = s.lowEffort ?? false;
   if (mcpToggle) mcpToggle.checked = state.mcpEnabled;
   if (mcpServersInput) mcpServersInput.value = state.mcpServers;
   if (apiTokenInput) apiTokenInput.value = state.apiToken;
   if (setupToken) setupToken.value = state.apiToken;
   updateMcpUI();
+  updateReasoningToggleUI();
 }
 
 function saveSettings() {
@@ -281,7 +294,29 @@ function saveSettings() {
     mcpEnabled: state.mcpEnabled,
     mcpServers: state.mcpServers,
     apiToken: state.apiToken,
+    enableThinking: state.enableThinking,
+    lowEffort: state.lowEffort,
   }));
+}
+
+// Reflects state.enableThinking / state.lowEffort on the composer's toggle
+// buttons — active styling, aria-pressed, and a hover title describing what
+// clicking it will do.
+function updateReasoningToggleUI() {
+  if (thinkingToggleBtn) {
+    thinkingToggleBtn.classList.toggle('active', state.enableThinking);
+    thinkingToggleBtn.setAttribute('aria-pressed', String(state.enableThinking));
+    thinkingToggleBtn.title = state.enableThinking
+      ? 'Model thinking: on — click to turn off'
+      : 'Model thinking: off — click to turn on';
+  }
+  if (lowEffortToggleBtn) {
+    lowEffortToggleBtn.classList.toggle('active', state.lowEffort);
+    lowEffortToggleBtn.setAttribute('aria-pressed', String(state.lowEffort));
+    lowEffortToggleBtn.title = state.lowEffort
+      ? 'Reasoning effort: low — click for normal'
+      : 'Reasoning effort: normal — click for low';
+  }
 }
 
 // LM Studio accepts `Authorization: Bearer <token>` once "Require
@@ -1623,6 +1658,12 @@ async function generateReply() {
           stream: useStream,
         };
 
+    // Reasoning controls — additive on top of either shape above. A model
+    // that doesn't recognize these fields just ignores them; "on"/"normal"
+    // are each the default already, so only deviations from that get sent.
+    if (!state.enableThinking) payload.chat_template_kwargs = { enable_thinking: false };
+    if (state.lowEffort) payload.reasoning_effort = 'low';
+
     const resp = await fetch(url, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
@@ -2104,6 +2145,8 @@ function saveCurrentSession() {
     temperature: parseFloat(tempSlider.value),
     maxTokens: parseInt(tokensSlider.value),
     systemPrompt: systemPrompt.value,
+    enableThinking: state.enableThinking,
+    lowEffort: state.lowEffort,
   };
   session.updatedAt = now;
   // Keep the active session at the top, newest-first
@@ -2136,6 +2179,9 @@ function loadSession(id) {
     if (st.temperature != null) { tempSlider.value = st.temperature; tempValue.textContent = tempSlider.value; }
     if (st.maxTokens != null) { tokensSlider.value = st.maxTokens; tokensValue.textContent = tokensSlider.value; }
     if (st.systemPrompt != null) systemPrompt.value = st.systemPrompt;
+    if (st.enableThinking != null) state.enableThinking = st.enableThinking;
+    if (st.lowEffort != null) state.lowEffort = st.lowEffort;
+    updateReasoningToggleUI();
     saveSettings();
   }
 
@@ -2651,6 +2697,21 @@ function setupListeners() {
   // their native "Take Photo / Photo Library / Browse Files" sheet.
   attachFileBtn.addEventListener('click', () => fileInput.click());
   fileInput.addEventListener('change', e => { handleAttachedFiles([...e.target.files]); e.target.value = ''; });
+
+  if (thinkingToggleBtn) {
+    thinkingToggleBtn.addEventListener('click', () => {
+      state.enableThinking = !state.enableThinking;
+      saveSettings();
+      updateReasoningToggleUI();
+    });
+  }
+  if (lowEffortToggleBtn) {
+    lowEffortToggleBtn.addEventListener('click', () => {
+      state.lowEffort = !state.lowEffort;
+      saveSettings();
+      updateReasoningToggleUI();
+    });
+  }
 
   userInput.addEventListener('paste', e => {
     if (!state.modelCaps.vision) return;

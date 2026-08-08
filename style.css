@@ -1326,6 +1326,40 @@ pre:has(.preview-btn) .copy-btn { right: 72px; }
 .attach-icon:hover { color: var(--text-primary); background: var(--bg-hover); }
 .attach-icon:active { color: var(--accent); }
 
+/* Reasoning controls (thinking on/off, low effort) — sit next to the attach
+   icon so they're a one-tap toggle per message, not buried in Settings. */
+.tool-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  -webkit-appearance: none;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+
+.tool-toggle-btn:hover { color: var(--text-primary); background: var(--bg-hover); }
+
+.tool-toggle-btn.active {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+  background: linear-gradient(to bottom, var(--bg-lift), var(--bg-hover));
+  box-shadow: 0 0 6px var(--accent-glow);
+}
+
+/* Labels only need to survive on wide screens — narrow composers keep the icon alone. */
+@media (max-width: 420px) {
+  .tool-toggle-btn span { display: none; }
+  .tool-toggle-btn { padding: 6px 8px; }
+}
+
 /* === MCP === */
 .mcp-pill {
   flex-shrink: 0;
