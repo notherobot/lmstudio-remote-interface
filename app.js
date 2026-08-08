@@ -1,13 +1,17 @@
 // === Version ===
 // Bump both together on every release (keep in sync with sw.js's CACHE_NAME
 // and the ?v= query strings in index.html).
-const APP_VERSION = 'v0.7.23';
-const APP_VERSION_DATE = '2026-08-06T02:00:00Z';
+const APP_VERSION = 'v0.7.24';
+const APP_VERSION_DATE = '2026-08-08T00:00:00Z';
 
 // Changelog, newest first. Each entry is one shipped version: its release
 // timestamp and the user-facing notes for that bump. The header dropdown
 // shows the newest 3; the "View last 10 updates" modal shows the newest 10.
 const CHANGELOG = [
+  { version: 'v0.7.24', date: '2026-08-08T00:00:00Z', notes: [
+    'Prompts can be edited and resent — replaces that turn and everything after it',
+    'Copy button added to sent prompts (answers already had one)',
+  ] },
   { version: 'v0.7.23', date: '2026-08-06T02:00:00Z', notes: [
     'Model picker sorted smallest to largest by parameter count',
   ] },
@@ -496,7 +500,10 @@ function addMessage(role, content, isError) {
   return bubble;
 }
 
-function addUserMessage(text, attachments) {
+// `index` is this message's position in state.messages — needed so Edit can
+// truncate the conversation from the right point and resend. Callers that
+// don't have one to give (none currently) can omit it and Edit is skipped.
+function addUserMessage(text, attachments, index) {
   hideWelcome();
   const wrap = document.createElement('div');
   wrap.className = 'message user';
@@ -544,11 +551,13 @@ function addUserMessage(text, attachments) {
   wrap.appendChild(avatar);
   wrap.appendChild(body);
   messagesEl.appendChild(wrap);
+  addUserMessageActions(body, wrap, bubble, text, attachments || [], index);
   scrollToBottom();
 }
 
 // Render a stored message (from a loaded session) back into the chat.
-function renderStoredMessage(msg) {
+// `index` comes from state.messages.forEach, which passes it automatically.
+function renderStoredMessage(msg, index) {
   if (msg.role === 'assistant') {
     addMessage('assistant', typeof msg.content === 'string' ? msg.content : extractText(msg.content));
     return;
@@ -563,7 +572,7 @@ function renderStoredMessage(msg) {
       else if (part.type === 'image_url') attachments.push({ kind: 'image', name: 'image', url: part.image_url?.url });
     });
   }
-  addUserMessage(text, attachments);
+  addUserMessage(text, attachments, index);
 }
 
 function addModelDivider(text) {
@@ -1394,7 +1403,7 @@ async function sendMessage() {
 
   const content = buildApiContent(text, attachments);
   state.messages.push({ role: 'user', content });
-  addUserMessage(text, attachments);
+  addUserMessage(text, attachments, state.messages.length - 1);
   userInput.value = '';
   clearAttachments();
   autoGrow();
@@ -1875,6 +1884,97 @@ function addMessageActions(body, getText, getRaw) {
     });
     row.appendChild(raw);
   }
+}
+
+const EDIT_SVG = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+
+// Copy + Edit actions for a user (prompt) message. Edit swaps the bubble for
+// a textarea; saving truncates state.messages (and the DOM) from this point
+// on and resends, exactly like editing a prompt in Claude/ChatGPT. `index`
+// is this message's position in state.messages at render time — stable
+// because messages before it never move, and editing removes everything
+// from `index` onward (in both state and DOM) before pushing the edit.
+function addUserMessageActions(body, wrap, bubble, text, attachments, index) {
+  const row = document.createElement('div');
+  row.className = 'msg-actions';
+
+  const copy = document.createElement('button');
+  copy.className = 'msg-action-btn';
+  copy.innerHTML = COPY_SVG + '<span>Copy</span>';
+  copy.addEventListener('click', () => {
+    navigator.clipboard.writeText(text || '');
+    const span = copy.querySelector('span');
+    span.textContent = 'Copied!';
+    setTimeout(() => span.textContent = 'Copy', 1500);
+  });
+  row.appendChild(copy);
+
+  if (index != null) {
+    const edit = document.createElement('button');
+    edit.className = 'msg-action-btn';
+    edit.innerHTML = EDIT_SVG + '<span>Edit</span>';
+    edit.addEventListener('click', () => startEditMessage(body, wrap, bubble, row, text, attachments, index));
+    row.appendChild(edit);
+  }
+
+  body.appendChild(row);
+}
+
+function startEditMessage(body, wrap, bubble, actionsRow, text, attachments, index) {
+  if (state.streaming) return;
+
+  const snapshot = bubble.innerHTML;
+  bubble.innerHTML = '';
+  actionsRow.classList.add('hidden');
+
+  const textarea = document.createElement('textarea');
+  textarea.className = 'edit-textarea';
+  textarea.value = text || '';
+  bubble.appendChild(textarea);
+
+  const editActions = document.createElement('div');
+  editActions.className = 'edit-actions';
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'msg-action-btn';
+  cancelBtn.textContent = 'Cancel';
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'msg-action-btn edit-save-btn';
+  saveBtn.textContent = 'Save & Submit';
+  editActions.appendChild(cancelBtn);
+  editActions.appendChild(saveBtn);
+  bubble.appendChild(editActions);
+
+  textarea.focus();
+  textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+
+  cancelBtn.addEventListener('click', () => {
+    bubble.innerHTML = snapshot;
+    actionsRow.classList.remove('hidden');
+  });
+
+  saveBtn.addEventListener('click', () => {
+    if (state.streaming || !state.connected) return;
+    const newText = textarea.value.trim();
+    const hasImage = attachments.some(a => a.kind === 'image');
+    if (!newText && !hasImage) return;
+
+    const newContent = buildApiContent(newText, attachments);
+    state.messages = state.messages.slice(0, index);
+    state.messages.push({ role: 'user', content: newContent });
+    // The truncated tail invalidates any server-side MCP thread, same as regenerate.
+    state.mcpResponseId = null;
+
+    // Drop this message and everything after it, then re-render the edit.
+    let node = wrap;
+    while (node) {
+      const next = node.nextSibling;
+      node.remove();
+      node = next;
+    }
+    addUserMessage(newText, attachments, index);
+    saveCurrentSession();
+    generateReply();
+  });
 }
 
 // === Auto-naming chats ===
